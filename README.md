@@ -1,5 +1,16 @@
 # OpenChord
 
+## Portable library archives
+
+Settings → **OpenChord Archive** connects to the configured server to:
+
+- prepare and share a complete `.openchord` library archive;
+- export an individual playlist with its dependencies;
+- choose an archive from Files and restore it on the server.
+
+Downloads use a temporary file and imports construct a disk-backed multipart
+request, keeping large archives out of the app's in-memory state.
+
 OpenChord is an open-source SwiftUI client for a self-hosted music server. It
 keeps the music library, listening history, and synchronized lyrics under the
 listener's control.
