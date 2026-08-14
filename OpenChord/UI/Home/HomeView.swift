@@ -27,7 +27,7 @@ struct HomeView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color.black)
+        .background(Color(uiColor: .systemBackground))
         .navigationTitle("Home")
         .navigationBarTitleDisplayMode(.large)
         .navigationDestination(for: Album.self) { AlbumView(album: $0) }
@@ -67,7 +67,7 @@ struct HomeView: View {
 
             NavigationLink(value: album) {
                 HStack(spacing: 14) {
-                    ArtworkView(style: album.artwork, cornerRadius: 14, showsShadow: false)
+                    ArtworkView(style: album.artwork, cornerRadius: 14)
                         .frame(width: 92, height: 92)
 
                     VStack(alignment: .leading, spacing: 5) {
@@ -172,7 +172,7 @@ private struct HomeAlbumCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 7) {
-            ArtworkView(style: album.artwork, cornerRadius: 14, showsShadow: false)
+            ArtworkView(style: album.artwork, cornerRadius: 14)
                 .frame(width: 154, height: 154)
 
             Text(album.title)

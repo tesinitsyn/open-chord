@@ -32,7 +32,7 @@ struct PlayerView: View {
                     ContentUnavailableView("Nothing Playing", systemImage: "music.note")
                 }
             }
-            .background(Color.black)
+            .background(Color(uiColor: .systemBackground))
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Button("Close", systemImage: "chevron.down") { dismiss() }
@@ -63,7 +63,7 @@ struct PlayerView: View {
                     ),
                     in: 0...max(1, track.duration)
                 )
-                .tint(.white)
+                .tint(Color.primary)
 
                 HStack {
                     Text(player.elapsed.playbackTime)

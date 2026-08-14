@@ -8,43 +8,58 @@ struct AlbumView: View {
 
     var body: some View {
         ScrollView {
-            VStack(spacing: 24) {
-                ArtworkView(style: album.artwork)
-                    .frame(maxWidth: 310)
-                    .padding(.top, 12)
+            VStack(spacing: 14) {
+                ArtworkView(style: album.artwork, cornerRadius: 20)
+                    .frame(width: 204, height: 204)
+                    .padding(.top, 4)
 
-                VStack(spacing: 6) {
-                    Text(album.title).font(.largeTitle.bold())
-                    Text(album.artist.name).font(.title3).foregroundStyle(.secondary)
+                VStack(spacing: 4) {
+                    Text(album.title)
+                        .font(.title2.bold())
+                        .multilineTextAlignment(.center)
+                    Text(album.artist.name)
+                        .font(.body)
+                        .foregroundStyle(.secondary)
                     Text("\(album.year) · \(album.durationText)")
                         .font(.caption)
                         .foregroundStyle(.tertiary)
                 }
 
-                Button {
-                    guard let first = album.tracks.first else { return }
-                    player.play(
-                        track: downloads.playable(first),
-                        in: downloads.playable(album.tracks)
-                    )
-                } label: {
-                    Label("Play", systemImage: "play.fill")
-                        .font(.headline)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 14)
-                }
-                .buttonStyle(.borderedProminent)
-                .tint(.white)
-                .foregroundStyle(.black)
+                HStack(spacing: 14) {
+                    Button {
+                        playAlbum(shuffled: true)
+                    } label: {
+                        Image(systemName: "shuffle")
+                            .font(.headline)
+                            .frame(width: 44, height: 44)
+                    }
+                    .openChordGlassButton()
+                    .disabled(album.tracks.isEmpty)
+                    .accessibilityLabel("Shuffle Album")
 
-                Button {
-                    Task { await downloads.download(album.tracks) }
-                } label: {
-                    Label(downloadAlbumTitle, systemImage: downloadAlbumSymbol)
-                        .frame(maxWidth: .infinity)
+                    Button {
+                        playAlbum(shuffled: false)
+                    } label: {
+                        Label("Play", systemImage: "play.fill")
+                            .font(.headline)
+                            .frame(width: 140, height: 44)
+                    }
+                    .openChordProminentGlassButton()
+                    .disabled(album.tracks.isEmpty)
+
+                    Button {
+                        Task { await downloads.download(album.tracks) }
+                    } label: {
+                        Label(downloadAlbumTitle, systemImage: downloadAlbumSymbol)
+                            .font(.subheadline.weight(.semibold))
+                            .labelStyle(.iconOnly)
+                            .frame(width: 44, height: 44)
+                    }
+                    .openChordGlassButton()
+                    .disabled(album.tracks.isEmpty || isDownloadingAlbum)
+                    .accessibilityLabel(downloadAlbumTitle)
                 }
-                .buttonStyle(.bordered)
-                .disabled(album.tracks.isEmpty || isDownloadingAlbum)
+                .padding(.top, 2)
 
                 LazyVStack(spacing: 0) {
                     ForEach(Array(album.tracks.enumerated()), id: \.element.id) { index, track in
@@ -57,7 +72,7 @@ struct AlbumView: View {
                     }
                 }
             }
-            .padding(.horizontal)
+            .padding(.horizontal, 18)
             .padding(.bottom, 40)
         }
         .navigationBarTitleDisplayMode(.inline)
@@ -72,6 +87,15 @@ struct AlbumView: View {
         } message: {
             Text(downloads.errorMessage ?? "")
         }
+    }
+
+    private func playAlbum(shuffled: Bool) {
+        let tracks = shuffled ? album.tracks.shuffled() : album.tracks
+        guard let first = tracks.first else { return }
+        player.play(
+            track: downloads.playable(first),
+            in: downloads.playable(tracks)
+        )
     }
 
     private var isDownloadingAlbum: Bool {
@@ -92,7 +116,7 @@ struct AlbumView: View {
 }
 
 /// A track action row that reflects playback and download state.
-struct TrackRow: View {
+private struct TrackRow: View {
     @EnvironmentObject private var catalog: CatalogStore
     @EnvironmentObject private var downloads: TrackDownloadStore
     @State private var mutationError: String?
@@ -142,7 +166,7 @@ struct TrackRow: View {
             }
             .accessibilityLabel("More actions for \(track.title)")
         }
-        .padding(.vertical, 9)
+        .padding(.vertical, 7)
         .alert(
             "Could Not Add Track",
             isPresented: Binding(

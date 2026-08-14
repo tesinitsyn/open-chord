@@ -88,7 +88,7 @@ struct RootView: View {
         .sheet(isPresented: $player.isPlayerPresented) {
             PlayerView()
         }
-        .tint(.white)
+        .tint(Color.primary)
         .task {
             await catalog.loadIfNeeded()
         }
@@ -129,7 +129,7 @@ struct RootView: View {
         .sheet(isPresented: $player.isPlayerPresented) {
             PlayerView()
         }
-        .tint(.white)
+        .tint(Color.primary)
         .task {
             await catalog.loadIfNeeded()
         }

@@ -32,7 +32,7 @@ struct SearchView: View {
                 }
             }
         }
-        .background(Color.black)
+        .background(Color(uiColor: .systemBackground))
         .navigationTitle("Search")
         .navigationDestination(for: Album.self) { AlbumView(album: $0) }
         .searchable(text: $query, prompt: "Albums or artists")
