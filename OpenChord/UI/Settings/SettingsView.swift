@@ -27,6 +27,15 @@ struct SettingsView: View {
                 .accessibilityIdentifier("serverSettings")
             }
 
+            Section("Library portability") {
+                NavigationLink {
+                    OpenChordArchiveView()
+                } label: {
+                    Label("OpenChord Archive", systemImage: "archivebox.fill")
+                }
+                .accessibilityIdentifier("openChordArchiveSettings")
+            }
+
             Section {
                 LabeledContent("Version", value: appVersion)
             } header: {
