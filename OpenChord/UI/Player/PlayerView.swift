@@ -4,49 +4,31 @@ import SwiftUI
 struct PlayerView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(PlaybackController.self) private var player
-    @State private var page = PlayerPage.player
+    @State private var path: [PlayerPage] = []
 
     /// Sections available within the full player presentation.
-    private enum PlayerPage {
-        case player
+    private enum PlayerPage: Hashable {
         case lyrics
         case queue
     }
 
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $path) {
             Group {
                 if let track = player.currentTrack {
-                    switch page {
-                    case .player:
-                        nowPlaying(track)
-                            .transition(.opacity.combined(with: .scale(scale: 0.98)))
-                    case .lyrics:
-                        LyricsView(track: track)
-                            .safeAreaInset(edge: .bottom) { pageNavigation }
-                            .transition(.move(edge: .trailing).combined(with: .opacity))
-                    case .queue:
-                        queueView(track)
-                            .transition(.move(edge: .trailing).combined(with: .opacity))
-                    }
+                    nowPlaying(track)
+                        .toolbar { closeToolbar }
                 } else {
                     ContentUnavailableView("Nothing Playing", systemImage: "music.note")
                 }
             }
             .background(Color(uiColor: .systemBackground))
-            .toolbar {
-                if page != .player {
-                    ToolbarItem(placement: .topBarLeading) {
-                        Button("Now Playing", systemImage: "chevron.left") {
-                            changePage(to: .player)
-                        }
+            .navigationDestination(for: PlayerPage.self) { destination in
+                if let track = player.currentTrack {
+                    switch destination {
+                    case .lyrics: lyricsView(track)
+                    case .queue: queueView(track)
                     }
-                }
-                ToolbarItemGroup(placement: .topBarTrailing) {
-                    if page == .queue {
-                        EditButton()
-                    }
-                    Button("Close", systemImage: "chevron.down") { dismiss() }
                 }
             }
         }
@@ -108,7 +90,7 @@ struct PlayerView: View {
 
             HStack(spacing: 86) {
                 Button {
-                    changePage(to: .lyrics)
+                    path.append(.lyrics)
                 } label: {
                     Image(systemName: "quote.bubble")
                         .frame(width: 44, height: 44)
@@ -116,7 +98,7 @@ struct PlayerView: View {
                 .accessibilityLabel("Show Lyrics")
 
                 Button {
-                    changePage(to: .queue)
+                    path.append(.queue)
                 } label: {
                     Image(systemName: "list.bullet")
                         .frame(width: 44, height: 44)
@@ -127,6 +109,33 @@ struct PlayerView: View {
 
             Spacer()
         }
+    }
+
+    private func lyricsView(_ track: Track) -> some View {
+        LyricsView(track: track)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(Color(uiColor: .systemBackground))
+            .overlay(alignment: .bottom) {
+                HStack(spacing: 18) {
+                    Button("Now Playing", systemImage: "waveform") {
+                        path.removeAll()
+                    }
+                    .labelStyle(.iconOnly)
+                    .frame(width: 48, height: 48)
+                    .openChordGlassButton()
+
+                    Button("Show Queue", systemImage: "list.bullet") {
+                        path.append(.queue)
+                    }
+                    .labelStyle(.iconOnly)
+                    .frame(width: 48, height: 48)
+                    .openChordGlassButton()
+                }
+                .padding(.bottom, 14)
+            }
+            .navigationTitle("Lyrics")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar { closeToolbar }
     }
 
     private func queueView(_ track: Track) -> some View {
@@ -169,30 +178,14 @@ struct PlayerView: View {
             }
         }
         .listStyle(.insetGrouped)
-    }
-
-    private var pageNavigation: some View {
-        HStack(spacing: 86) {
-            Button {
-                changePage(to: .player)
-            } label: {
-                Image(systemName: "waveform")
-                    .frame(width: 44, height: 44)
+        .navigationTitle("Queue")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItemGroup(placement: .topBarTrailing) {
+                EditButton()
+                Button("Close", systemImage: "chevron.down") { dismiss() }
             }
-            .accessibilityLabel("Show Now Playing")
-
-            Button {
-                changePage(to: .queue)
-            } label: {
-                Image(systemName: "list.bullet")
-                    .frame(width: 44, height: 44)
-            }
-            .accessibilityLabel("Show Queue")
         }
-        .buttonStyle(.plain)
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 8)
-        .background(.ultraThinMaterial)
     }
 
     private func playbackModeButton(
@@ -243,9 +236,12 @@ struct PlayerView: View {
         }
     }
 
-    private func changePage(to destination: PlayerPage) {
-        withAnimation(.snappy(duration: 0.32)) {
-            page = destination
+    @ToolbarContentBuilder
+    private var closeToolbar: some ToolbarContent {
+        ToolbarItem(placement: .topBarTrailing) {
+            Button("Close", systemImage: "chevron.down") {
+                dismiss()
+            }
         }
     }
 }
