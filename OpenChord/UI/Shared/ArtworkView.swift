@@ -9,7 +9,6 @@ import UIKit
 struct ArtworkView: View {
     let style: ArtworkStyle
     var cornerRadius: CGFloat = 24
-    var showsShadow = true
     @State private var remoteImage: UIImage?
 
     var body: some View {
@@ -33,11 +32,6 @@ struct ArtworkView: View {
         }
         .aspectRatio(1, contentMode: .fit)
         .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
-        .shadow(
-            color: showsShadow ? style.colors.first?.swiftUIColor.opacity(0.3) ?? .clear : .clear,
-            radius: showsShadow ? 24 : 0,
-            y: showsShadow ? 12 : 0
-        )
         .accessibilityHidden(true)
         .task(id: style.remoteURL) {
             remoteImage = nil

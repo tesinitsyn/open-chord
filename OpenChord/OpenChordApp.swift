@@ -9,6 +9,7 @@ struct OpenChordApp: App {
     @State private var player = PlaybackController()
     @StateObject private var catalog = CatalogStore()
     @StateObject private var downloads = TrackDownloadStore()
+    @AppStorage("prefersLightAppearance") private var prefersLightAppearance = false
 
     var body: some Scene {
         WindowGroup {
@@ -16,7 +17,7 @@ struct OpenChordApp: App {
                 .environment(player)
                 .environmentObject(catalog)
                 .environmentObject(downloads)
-                .preferredColorScheme(.dark)
+                .preferredColorScheme(prefersLightAppearance ? .light : .dark)
         }
     }
 }

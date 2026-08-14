@@ -3,9 +3,17 @@ import SwiftUI
 /// App-level preferences and server diagnostics.
 struct SettingsView: View {
     @EnvironmentObject private var catalog: CatalogStore
+    @AppStorage("prefersLightAppearance") private var prefersLightAppearance = false
 
     var body: some View {
         List {
+            Section("Appearance") {
+                Toggle(isOn: $prefersLightAppearance) {
+                    Label("Light Appearance", systemImage: "sun.max.fill")
+                }
+                .accessibilityIdentifier("lightAppearanceToggle")
+            }
+
             Section("Connection") {
                 NavigationLink {
                     ServerSettingsView()
