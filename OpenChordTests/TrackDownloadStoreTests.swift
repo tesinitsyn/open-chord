@@ -28,6 +28,14 @@ struct TrackDownloadStoreTests {
         #expect(localURL.isFileURL)
         #expect(localURL.pathExtension == "mp3")
         #expect(try Data(contentsOf: localURL) == DownloadURLProtocol.audio)
+        #expect(store.downloadedTrackCount == 1)
+        #expect(store.downloadedBytes == Int64(DownloadURLProtocol.audio.count))
+
+        try store.removeDownload(for: track)
+
+        #expect(store.state(for: track) == .idle)
+        #expect(store.downloadedTrackCount == 0)
+        #expect(store.downloadedBytes == 0)
     }
 }
 

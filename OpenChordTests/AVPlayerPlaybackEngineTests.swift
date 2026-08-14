@@ -14,7 +14,7 @@ struct AVPlayerPlaybackEngineTests {
 
     @Test("Loading media creates a player item and publishes initial state")
     func loadingMediaCreatesPlayerItem() {
-        let player = AVPlayer()
+        let player = AVQueuePlayer()
         let engine = AVPlayerPlaybackEngine(player: player)
         let recorder = PlaybackEngineRecorder(engine: engine)
 
@@ -56,9 +56,20 @@ struct AVPlayerPlaybackEngineTests {
         #expect(recorder.state.elapsed == 24)
     }
 
+    @Test("Preparing the next track queues it before current playback ends")
+    func preparesNextTrackForGaplessPlayback() {
+        let player = AVQueuePlayer()
+        let engine = AVPlayerPlaybackEngine(player: player)
+        engine.load(makeTrack(title: "First"), autoplay: false)
+
+        engine.prepareNext(makeTrack(title: "Second"))
+
+        #expect(player.items().count == 2)
+    }
+
     @Test("Player item completion emits the engine finished event")
     func itemCompletionEmitsFinished() async throws {
-        let player = AVPlayer()
+        let player = AVQueuePlayer()
         let engine = AVPlayerPlaybackEngine(player: player)
         let recorder = PlaybackEngineRecorder(engine: engine)
         engine.load(makeTrack(duration: 96), autoplay: false)

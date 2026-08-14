@@ -30,6 +30,10 @@ protocol PlaybackEngine: AnyObject {
     ///   - autoplay: Whether playback should begin after loading succeeds.
     func load(_ track: Track, autoplay: Bool)
 
+    /// Preloads the item that should follow the current track. Production
+    /// engines use this to avoid opening media only after playback has ended.
+    func prepareNext(_ track: Track?)
+
     /// Resumes the loaded item when one is available.
     func play()
 
@@ -77,6 +81,8 @@ final class SimulatedPlaybackEngine: PlaybackEngine {
             )
         )
     }
+
+    func prepareNext(_: Track?) {}
 
     func play() {
         guard stateSubject.value.duration > 0 else { return }

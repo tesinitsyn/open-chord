@@ -2,42 +2,37 @@ import SwiftUI
 
 /// Full-screen player presentation with now-playing and synchronized-lyrics pages.
 struct PlayerView: View {
-    @Environment(\.dismiss) private var dismiss
     @Environment(PlaybackController.self) private var player
     @State private var page = PlayerPage.player
 
     /// Sections available within the full player presentation.
-    private enum PlayerPage: String, CaseIterable {
-        case player = "Now Playing"
-        case lyrics = "Lyrics"
+    private enum PlayerPage: Hashable {
+        case player
+        case lyrics
+        case queue
     }
 
     var body: some View {
         NavigationStack {
-            Group {
+            VStack(spacing: 0) {
                 if let track = player.currentTrack {
-                    VStack(spacing: 18) {
-                        Picker("Player section", selection: $page) {
-                            ForEach(PlayerPage.allCases, id: \.self) { Text($0.rawValue).tag($0) }
-                        }
-                        .pickerStyle(.segmented)
-                        .padding(.horizontal)
-
+                    ZStack {
                         switch page {
                         case .player: nowPlaying(track)
                         case .lyrics: LyricsView(track: track)
+                        case .queue: queueView(track)
                         }
                     }
+                    .id(page)
+                    .transition(.opacity.combined(with: .scale(scale: 0.985)))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+                    playerNavigation
                 } else {
                     ContentUnavailableView("Nothing Playing", systemImage: "music.note")
                 }
             }
             .background(Color(uiColor: .systemBackground))
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button("Close", systemImage: "chevron.down") { dismiss() }
-                }
-            }
         }
         .presentationDragIndicator(.visible)
     }
@@ -75,11 +70,23 @@ struct PlayerView: View {
             }
             .padding(.horizontal, 24)
 
-            HStack(spacing: 44) {
+            HStack(spacing: 25) {
+                Button {
+                    player.toggleShuffle()
+                } label: {
+                    Image(systemName: "shuffle")
+                        .foregroundStyle(player.isShuffleEnabled ? Color.primary : .secondary)
+                        .frame(width: 40, height: 44)
+                }
+                .accessibilityLabel(player.isShuffleEnabled ? "Turn Shuffle Off" : "Turn Shuffle On")
+                .accessibilityValue(player.isShuffleEnabled ? "On" : "Off")
+
                 Button {
                     player.playPrevious()
                 } label: {
-                    Image(systemName: "backward.fill").font(.title)
+                    Image(systemName: "backward.fill")
+                        .font(.title2)
+                        .frame(width: 40, height: 44)
                 }
                 Button {
                     player.togglePlayback()
@@ -90,12 +97,163 @@ struct PlayerView: View {
                 Button {
                     player.playNext()
                 } label: {
-                    Image(systemName: "forward.fill").font(.title)
+                    Image(systemName: "forward.fill")
+                        .font(.title2)
+                        .frame(width: 40, height: 44)
                 }
+                Button {
+                    player.cycleRepeatMode()
+                } label: {
+                    Image(systemName: player.repeatMode.symbol)
+                        .foregroundStyle(player.repeatMode == .off ? .secondary : Color.primary)
+                        .frame(width: 40, height: 44)
+                }
+                .accessibilityLabel(repeatTitle)
+                .accessibilityValue(player.repeatMode == .off ? "Off" : "On")
             }
             .buttonStyle(.plain)
 
             Spacer()
+        }
+    }
+
+    private func queueView(_ track: Track) -> some View {
+        List {
+            Section {
+                HStack(spacing: 10) {
+                    playbackModeButton(
+                        title: "Shuffle",
+                        symbol: "shuffle",
+                        isActive: player.isShuffleEnabled
+                    ) {
+                        player.toggleShuffle()
+                    }
+                    playbackModeButton(
+                        title: repeatTitle,
+                        symbol: player.repeatMode.symbol,
+                        isActive: player.repeatMode != .off
+                    ) {
+                        player.cycleRepeatMode()
+                    }
+                    EditButton()
+                        .font(.subheadline.weight(.semibold))
+                        .frame(minWidth: 64, minHeight: 44)
+                        .background(Color.secondary.opacity(0.12), in: Capsule())
+                }
+                .listRowInsets(EdgeInsets())
+                .listRowBackground(Color.clear)
+            }
+
+            Section("Now Playing") {
+                queueRow(track, isCurrent: true)
+            }
+            Section("Playing Next") {
+                if player.upcomingTracks.isEmpty {
+                    Text("The queue ends after this track.")
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(player.upcomingTracks) { queuedTrack in
+                        Button {
+                            player.playQueued(queuedTrack)
+                        } label: {
+                            queueRow(queuedTrack, isCurrent: false)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    .onDelete(perform: player.removeUpcomingTracks)
+                    .onMove(perform: player.moveUpcomingTracks)
+                }
+            }
+        }
+        .listStyle(.insetGrouped)
+        .scrollContentBackground(.hidden)
+        .background(Color(uiColor: .systemBackground))
+    }
+
+    private var playerNavigation: some View {
+        HStack(spacing: 30) {
+            playerModeButton(page: .lyrics, title: "Lyrics", symbol: "quote.bubble")
+            playerModeButton(page: .player, title: "Now Playing", symbol: "waveform")
+            playerModeButton(page: .queue, title: "Queue", symbol: "list.bullet")
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.top, 8)
+        .padding(.bottom, 14)
+    }
+
+    private func playerModeButton(page destination: PlayerPage, title: String, symbol: String) -> some View {
+        let isSelected = page == destination
+        return Button(title, systemImage: symbol) {
+            setPage(destination)
+        }
+        .labelStyle(.iconOnly)
+        .font(.headline)
+        .frame(width: 48, height: 48)
+        .foregroundStyle(isSelected ? Color.primary : .secondary)
+        .background(
+            isSelected ? Color.primary.opacity(0.1) : Color.clear,
+            in: Circle()
+        )
+        .openChordGlass(cornerRadius: 24)
+        .contentTransition(.symbolEffect(.replace))
+        .accessibilityLabel(title)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
+
+    private func playbackModeButton(
+        title: String,
+        symbol: String,
+        isActive: Bool,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Label(title, systemImage: symbol)
+                .font(.subheadline.weight(.semibold))
+                .frame(maxWidth: .infinity)
+                .frame(height: 44)
+                .foregroundStyle(
+                    isActive ? Color(uiColor: .systemBackground) : Color.primary
+                )
+                .background(
+                    isActive ? Color.primary : Color.secondary.opacity(0.12),
+                    in: Capsule()
+                )
+                .contentTransition(.symbolEffect(.replace))
+        }
+        .buttonStyle(.plain)
+        .accessibilityValue(isActive ? "On" : "Off")
+    }
+
+    private func queueRow(_ track: Track, isCurrent: Bool) -> some View {
+        HStack(spacing: 12) {
+            ArtworkView(style: track.artwork, cornerRadius: 6)
+                .frame(width: 44, height: 44)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(track.title).lineLimit(1)
+                Text(track.artistName).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+            }
+            Spacer()
+            if isCurrent {
+                Image(systemName: player.isPlaying ? "waveform" : "pause.fill")
+                    .foregroundStyle(Color.accentColor)
+                    .accessibilityHidden(true)
+            }
+        }
+        .accessibilityElement(children: .combine)
+    }
+
+    private var repeatTitle: String {
+        switch player.repeatMode {
+        case .off: "Repeat"
+        case .all: "Repeat All"
+        case .one: "Repeat One"
+        }
+    }
+
+    private func setPage(_ destination: PlayerPage) {
+        let resolvedPage: PlayerPage = page == destination && destination != .player ? .player : destination
+        withAnimation(.smooth(duration: 0.38)) {
+            page = resolvedPage
         }
     }
 }

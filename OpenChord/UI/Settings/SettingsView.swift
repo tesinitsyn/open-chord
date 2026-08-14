@@ -3,6 +3,7 @@ import SwiftUI
 /// App-level preferences and server diagnostics.
 struct SettingsView: View {
     @EnvironmentObject private var catalog: CatalogStore
+    @EnvironmentObject private var downloads: TrackDownloadStore
     @AppStorage("prefersLightAppearance") private var prefersLightAppearance = false
 
     var body: some View {
@@ -44,6 +45,20 @@ struct SettingsView: View {
                 .accessibilityIdentifier("openChordArchiveSettings")
             }
 
+            Section("Offline") {
+                NavigationLink {
+                    DownloadStorageView()
+                } label: {
+                    LabeledContent {
+                        Text(downloads.downloadedBytes, format: .byteCount(style: .file))
+                            .foregroundStyle(.secondary)
+                    } label: {
+                        Label("Downloaded Music", systemImage: "arrow.down.circle.fill")
+                    }
+                }
+                .accessibilityIdentifier("downloadStorageSettings")
+            }
+
             Section {
                 LabeledContent("Version", value: appVersion)
             } header: {
@@ -66,6 +81,43 @@ struct SettingsView: View {
 
     private var appVersion: String {
         Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "—"
+    }
+}
+
+private struct DownloadStorageView: View {
+    @EnvironmentObject private var downloads: TrackDownloadStore
+    @State private var isConfirmingRemoval = false
+
+    var body: some View {
+        List {
+            Section {
+                LabeledContent("Tracks", value: "\(downloads.downloadedTrackCount)")
+                LabeledContent(
+                    "Storage Used",
+                    value: downloads.downloadedBytes.formatted(.byteCount(style: .file))
+                )
+            }
+
+            Section {
+                Button("Remove All Downloads", systemImage: "trash", role: .destructive) {
+                    isConfirmingRemoval = true
+                }
+                .disabled(downloads.downloadedTrackCount == 0)
+            } footer: {
+                Text("Music remains in your library and can be downloaded again.")
+            }
+        }
+        .navigationTitle("Downloaded Music")
+        .confirmationDialog(
+            "Remove All Downloads?",
+            isPresented: $isConfirmingRemoval,
+            titleVisibility: .visible
+        ) {
+            Button("Remove All Downloads", role: .destructive) {
+                try? downloads.removeAllDownloads()
+            }
+            Button("Cancel", role: .cancel) {}
+        }
     }
 }
 

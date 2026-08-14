@@ -23,6 +23,7 @@ final class ManualPlaybackEngine: PlaybackEngine {
     private let eventSubject = PassthroughSubject<PlaybackEngineEvent, Never>()
 
     private(set) var loadedTrack: Track?
+    private(set) var preparedTrack: Track?
 
     var state: AnyPublisher<PlaybackEngineState, Never> {
         stateSubject.eraseToAnyPublisher()
@@ -35,6 +36,10 @@ final class ManualPlaybackEngine: PlaybackEngine {
     func load(_ track: Track, autoplay: Bool) {
         loadedTrack = track
         stateSubject.send(.init(elapsed: 0, duration: track.duration, isPlaying: autoplay))
+    }
+
+    func prepareNext(_ track: Track?) {
+        preparedTrack = track
     }
 
     func play() {
@@ -60,6 +65,13 @@ final class ManualPlaybackEngine: PlaybackEngine {
     }
 
     func finish() {
+        if let preparedTrack {
+            loadedTrack = preparedTrack
+            self.preparedTrack = nil
+            stateSubject.send(
+                .init(elapsed: 0, duration: preparedTrack.duration, isPlaying: true)
+            )
+        }
         eventSubject.send(.finished)
     }
 }

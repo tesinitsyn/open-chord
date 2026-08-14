@@ -4,6 +4,7 @@ import SwiftUI
 struct AlbumView: View {
     @Environment(PlaybackController.self) private var player
     @EnvironmentObject private var downloads: TrackDownloadStore
+    @State private var isConfirmingDownloadRemoval = false
     let album: Album
 
     var body: some View {
@@ -48,7 +49,11 @@ struct AlbumView: View {
                     .disabled(album.tracks.isEmpty)
 
                     Button {
-                        Task { await downloads.download(album.tracks) }
+                        if isAlbumDownloaded {
+                            isConfirmingDownloadRemoval = true
+                        } else {
+                            Task { await downloads.download(album.tracks) }
+                        }
                     } label: {
                         Label(downloadAlbumTitle, systemImage: downloadAlbumSymbol)
                             .font(.subheadline.weight(.semibold))
@@ -76,6 +81,22 @@ struct AlbumView: View {
             .padding(.bottom, 40)
         }
         .navigationBarTitleDisplayMode(.inline)
+        .confirmationDialog(
+            "Remove Album Download?",
+            isPresented: $isConfirmingDownloadRemoval,
+            titleVisibility: .visible
+        ) {
+            Button("Remove Download", role: .destructive) {
+                do {
+                    try downloads.removeDownloads(for: album.tracks)
+                } catch {
+                    downloads.errorMessage = error.localizedDescription
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("The album remains in your library and can be streamed again.")
+        }
         .alert(
             "Download failed",
             isPresented: Binding(
@@ -90,12 +111,12 @@ struct AlbumView: View {
     }
 
     private func playAlbum(shuffled: Bool) {
-        let tracks = shuffled ? album.tracks.shuffled() : album.tracks
-        guard let first = tracks.first else { return }
-        player.play(
-            track: downloads.playable(first),
-            in: downloads.playable(tracks)
-        )
+        let tracks = downloads.playable(album.tracks)
+        if shuffled {
+            player.playShuffled(tracks)
+        } else if let first = tracks.first {
+            player.play(track: first, in: tracks)
+        }
     }
 
     private var isDownloadingAlbum: Bool {
@@ -117,9 +138,9 @@ struct AlbumView: View {
 
 /// A track action row that reflects playback and download state.
 private struct TrackRow: View {
-    @EnvironmentObject private var catalog: CatalogStore
+    @Environment(PlaybackController.self) private var player
     @EnvironmentObject private var downloads: TrackDownloadStore
-    @State private var mutationError: String?
+    @State private var isChoosingPlaylist = false
     let number: Int
     let track: Track
     let action: () -> Void
@@ -150,15 +171,15 @@ private struct TrackRow: View {
             downloadButton
 
             Menu {
-                if catalog.playlists.isEmpty {
-                    Text("Create a playlist in Library first")
-                } else {
-                    ForEach(catalog.playlists) { playlist in
-                        Button(playlist.name, systemImage: "music.note.list") {
-                            addToPlaylist(playlist)
-                        }
-                        .disabled(playlist.tracks.contains { $0.id == track.id })
-                    }
+                Button("Play Next", systemImage: "text.line.first.and.arrowtriangle.forward") {
+                    player.playNext(downloads.playable(track))
+                }
+                Button("Add to Queue", systemImage: "text.badge.plus") {
+                    player.addToQueue(downloads.playable(track))
+                }
+                Divider()
+                Button("Add to Playlist", systemImage: "music.note.list") {
+                    isChoosingPlaylist = true
                 }
             } label: {
                 Image(systemName: "ellipsis")
@@ -167,26 +188,8 @@ private struct TrackRow: View {
             .accessibilityLabel("More actions for \(track.title)")
         }
         .padding(.vertical, 7)
-        .alert(
-            "Could Not Add Track",
-            isPresented: Binding(
-                get: { mutationError != nil },
-                set: { if !$0 { mutationError = nil } }
-            )
-        ) {
-            Button("OK", role: .cancel) {}
-        } message: {
-            Text(mutationError ?? "")
-        }
-    }
-
-    private func addToPlaylist(_ playlist: Playlist) {
-        Task {
-            do {
-                try await catalog.add(track, to: playlist)
-            } catch {
-                mutationError = error.localizedDescription
-            }
+        .sheet(isPresented: $isChoosingPlaylist) {
+            AddTrackToPlaylistView(track: track)
         }
     }
 
@@ -199,10 +202,20 @@ private struct TrackRow: View {
                 .frame(width: 36, height: 36)
                 .accessibilityLabel("Downloading \(track.title)")
         case .downloaded:
-            Image(systemName: "checkmark.circle.fill")
-                .foregroundStyle(.green)
-                .frame(width: 36, height: 36)
-                .accessibilityLabel("\(track.title) downloaded")
+            Menu {
+                Button("Remove Download", systemImage: "trash", role: .destructive) {
+                    do {
+                        try downloads.removeDownload(for: track)
+                    } catch {
+                        downloads.errorMessage = error.localizedDescription
+                    }
+                }
+            } label: {
+                Image(systemName: "checkmark.circle.fill")
+                    .foregroundStyle(.green)
+            }
+            .frame(width: 36, height: 36)
+            .accessibilityLabel("\(track.title) downloaded")
         case .idle, .failed:
             Button("Download \(track.title)", systemImage: "arrow.down.circle") {
                 Task { await downloads.download(track) }
