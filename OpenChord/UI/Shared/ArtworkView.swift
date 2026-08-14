@@ -9,7 +9,7 @@ import UIKit
 struct ArtworkView: View {
     let style: ArtworkStyle
     var cornerRadius: CGFloat = 24
-    var showsShadow = true
+    var showsShadow = false
     @State private var remoteImage: UIImage?
 
     var body: some View {

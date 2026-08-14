@@ -22,6 +22,27 @@ struct CatalogAPIClientTests {
         #expect(album.artwork.remoteURL?.absoluteString == "http://192.168.1.20:8080/media/artwork/cover")
     }
 
+    @Test("Adds a track to a playlist through GraphQL")
+    func addsTrackToPlaylist() async throws {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [PlaylistMutationURLProtocol.self]
+        let client = CatalogAPIClient(session: URLSession(configuration: configuration))
+        let serverURL = try #require(URL(string: "http://192.168.1.20:8080"))
+        let playlistID = try #require(UUID(uuidString: "50000000-0000-0000-0000-000000000001"))
+        let trackID = try #require(UUID(uuidString: "30000000-0000-0000-0000-000000000001"))
+
+        let playlist = try await client.add(
+            trackID: trackID,
+            to: playlistID,
+            at: serverURL
+        )
+
+        #expect(playlist.id == playlistID)
+        #expect(playlist.tracks.map(\.id) == [trackID])
+        #expect(PlaylistMutationURLProtocol.receivedBody?.contains("addTrackToPlaylist") == true)
+        #expect(PlaylistMutationURLProtocol.receivedBody?.contains(trackID.uuidString) == true)
+    }
+
     @Test(
         "Normalizes common local server addresses",
         arguments: [
@@ -121,6 +142,52 @@ private final class CatalogURLProtocol: URLProtocol, @unchecked Sendable {
         )!
         client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
         client?.urlProtocol(self, didLoad: Self.response)
+        client?.urlProtocolDidFinishLoading(self)
+    }
+
+    override func stopLoading() {}
+}
+
+private final class PlaylistMutationURLProtocol: URLProtocol, @unchecked Sendable {
+    nonisolated(unsafe) static var receivedBody: String?
+
+    override class func canInit(with request: URLRequest) -> Bool {
+        request.url?.path == "/graphql"
+    }
+
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+
+    override func startLoading() {
+        Self.receivedBody = request.httpBody.flatMap { String(data: $0, encoding: .utf8) }
+        let data = """
+            {
+              "data": {
+                "playlist": {
+                  "id": "50000000-0000-0000-0000-000000000001",
+                  "name": "Night drive",
+                  "description": "",
+                  "artworkUrl": null,
+                  "tracks": [{
+                    "id": "30000000-0000-0000-0000-000000000001",
+                    "title": "Night Drive",
+                    "durationMs": 96000,
+                    "artistName": "Aurora Lines",
+                    "albumTitle": "Afterglow",
+                    "streamUrl": "http://localhost:8080/media/tracks/track",
+                    "lyrics": []
+                  }]
+                }
+              }
+            }
+            """.data(using: .utf8)!
+        let response = HTTPURLResponse(
+            url: request.url!,
+            statusCode: 200,
+            httpVersion: "HTTP/1.1",
+            headerFields: ["Content-Type": "application/json"]
+        )!
+        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: data)
         client?.urlProtocolDidFinishLoading(self)
     }
 

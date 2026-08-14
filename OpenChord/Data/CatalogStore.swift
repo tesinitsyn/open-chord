@@ -26,19 +26,36 @@ final class CatalogStore: ObservableObject {
     @Published private(set) var connectionState: ConnectionState = .unknown
 
     private let loader: any CatalogLoading
+    private let playlistClient: any PlaylistMutating
     private let defaults: UserDefaults
     private var hasLoaded = false
 
     init(
         loader: any CatalogLoading = CatalogAPIClient(),
+        playlistClient: any PlaylistMutating = CatalogAPIClient(),
         defaults: UserDefaults = .standard
     ) {
         self.loader = loader
+        self.playlistClient = playlistClient
         self.defaults = defaults
         let storedAddress = defaults.string(forKey: Self.serverURLKey) ?? Self.defaultServerAddress
         serverURL =
             Self.normalizedURL(from: storedAddress)
             ?? URL(string: Self.defaultServerAddress)!
+    }
+
+    /// Adds a track idempotently and updates the matching local playlist.
+    func add(_ track: Track, to playlist: Playlist) async throws {
+        let updated = try await playlistClient.add(
+            trackID: track.id,
+            to: playlist.id,
+            at: serverURL
+        )
+        guard let index = playlists.firstIndex(where: { $0.id == updated.id }) else {
+            playlists.insert(updated, at: 0)
+            return
+        }
+        playlists[index] = updated
     }
 
     /// Loads the catalog once for the lifetime of this store.

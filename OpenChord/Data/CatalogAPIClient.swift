@@ -11,12 +11,17 @@ protocol CatalogLoading: Sendable {
     func fetchPlaylists(from serverURL: URL) async throws -> [Playlist]
 }
 
+/// Playlist mutations used by track action menus.
+protocol PlaylistMutating: Sendable {
+    func add(trackID: UUID, to playlistID: UUID, at serverURL: URL) async throws -> Playlist
+}
+
 extension CatalogLoading {
     func fetchPlaylists(from serverURL: URL) async throws -> [Playlist] { [] }
 }
 
 /// A GraphQL-backed catalog loader.
-struct CatalogAPIClient: CatalogLoading {
+struct CatalogAPIClient: CatalogLoading, PlaylistMutating {
     private let session: URLSession
 
     /// Creates a catalog client.
@@ -108,6 +113,34 @@ struct CatalogAPIClient: CatalogLoading {
         guard let payload = envelope.data else { throw CatalogAPIError.invalidResponse }
         return payload.playlists.map { $0.playlist(relativeTo: serverURL) }
     }
+
+    func add(trackID: UUID, to playlistID: UUID, at serverURL: URL) async throws -> Playlist {
+        let endpoint = serverURL.appending(path: "graphql")
+        var request = URLRequest(url: endpoint)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.timeoutInterval = 12
+        request.httpBody = try JSONEncoder().encode(
+            PlaylistMutationRequest(
+                query: """
+                    mutation AddTrackToPlaylist($playlistID: ID!, $trackID: ID!) {
+                      playlist: addTrackToPlaylist(playlistId: $playlistID, trackId: $trackID) {
+                        id name description artworkUrl
+                        tracks { id title durationMs artistName albumTitle streamUrl lyrics { id text startMs endMs } }
+                      }
+                    }
+                    """,
+                variables: PlaylistMutationVariables(playlistID: playlistID, trackID: trackID)
+            )
+        )
+        let (data, response) = try await session.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse else { throw CatalogAPIError.invalidResponse }
+        guard (200..<300).contains(httpResponse.statusCode) else { throw CatalogAPIError.httpStatus(httpResponse.statusCode) }
+        let envelope = try JSONDecoder().decode(GraphQLEnvelope<PlaylistMutationPayload>.self, from: data)
+        if let message = envelope.errors?.first?.message { throw CatalogAPIError.graphQL(message) }
+        guard let payload = envelope.data else { throw CatalogAPIError.invalidResponse }
+        return payload.playlist.playlist(relativeTo: serverURL)
+    }
 }
 
 /// Errors produced after a catalog request reaches the server.
@@ -133,6 +166,16 @@ private struct GraphQLRequest: Encodable {
     let query: String
 }
 
+private struct PlaylistMutationRequest: Encodable {
+    let query: String
+    let variables: PlaylistMutationVariables
+}
+
+private struct PlaylistMutationVariables: Encodable {
+    let playlistID: UUID
+    let trackID: UUID
+}
+
 /// GraphQL response wrapper that keeps transport errors separate from payload decoding.
 private struct GraphQLEnvelope<Payload: Decodable>: Decodable {
     let data: Payload?
@@ -151,6 +194,10 @@ private struct CatalogPayload: Decodable {
 
 private struct PlaylistPayload: Decodable {
     let playlists: [PlaylistDTO]
+}
+
+private struct PlaylistMutationPayload: Decodable {
+    let playlist: PlaylistDTO
 }
 
 private struct PlaylistDTO: Decodable {

@@ -93,7 +93,9 @@ struct AlbumView: View {
 
 /// A track action row that reflects playback and download state.
 struct TrackRow: View {
+    @EnvironmentObject private var catalog: CatalogStore
     @EnvironmentObject private var downloads: TrackDownloadStore
+    @State private var mutationError: String?
     let number: Int
     let track: Track
     let action: () -> Void
@@ -122,8 +124,46 @@ struct TrackRow: View {
             .buttonStyle(.plain)
 
             downloadButton
+
+            Menu {
+                if catalog.playlists.isEmpty {
+                    Text("Create a playlist in Library first")
+                } else {
+                    ForEach(catalog.playlists) { playlist in
+                        Button(playlist.name, systemImage: "music.note.list") {
+                            addToPlaylist(playlist)
+                        }
+                        .disabled(playlist.tracks.contains { $0.id == track.id })
+                    }
+                }
+            } label: {
+                Image(systemName: "ellipsis")
+                    .frame(width: 36, height: 36)
+            }
+            .accessibilityLabel("More actions for \(track.title)")
         }
         .padding(.vertical, 9)
+        .alert(
+            "Could Not Add Track",
+            isPresented: Binding(
+                get: { mutationError != nil },
+                set: { if !$0 { mutationError = nil } }
+            )
+        ) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(mutationError ?? "")
+        }
+    }
+
+    private func addToPlaylist(_ playlist: Playlist) {
+        Task {
+            do {
+                try await catalog.add(track, to: playlist)
+            } catch {
+                mutationError = error.localizedDescription
+            }
+        }
     }
 
     @ViewBuilder
