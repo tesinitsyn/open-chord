@@ -55,11 +55,15 @@ struct AuthenticationView: View {
             Text("Connect to Server").font(.title2.bold())
             Text("Enter the URL provided by the person running your OpenChord server.")
                 .foregroundStyle(.secondary)
-            TextField("http://192.168.1.20:8080", text: $address)
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-                .keyboardType(.URL)
-                .textFieldStyle(.roundedBorder)
+            AuthenticationField(
+                title: "Server address",
+                placeholder: "192.168.1.20:8080",
+                systemImage: "server.rack",
+                text: $address,
+                keyboardType: .URL,
+                contentType: .URL,
+                capitalizes: false
+            )
                 .accessibilityIdentifier("authServerAddress")
             errorLabel
             Button { Task { await connect() } } label: {
@@ -93,15 +97,35 @@ struct AuthenticationView: View {
                     .font(.footnote).foregroundStyle(.secondary)
             }
             if !capabilities.initialized || action == .register {
-                TextField("Display name", text: $displayName)
-                    .textContentType(.name).textFieldStyle(.roundedBorder)
+                AuthenticationField(
+                    title: "Display name",
+                    placeholder: "How others will see you",
+                    systemImage: "person.text.rectangle",
+                    text: $displayName,
+                    contentType: .name
+                )
             }
-            TextField("Username", text: $username)
-                .textInputAutocapitalization(.never).autocorrectionDisabled()
-                .textContentType(.username).textFieldStyle(.roundedBorder)
-            SecureField("Password", text: $password)
-                .textContentType(capabilities.initialized && action == .login ? .password : .newPassword)
-                .textFieldStyle(.roundedBorder)
+            AuthenticationField(
+                title: "Username",
+                placeholder: "Your sign-in name",
+                systemImage: "at",
+                text: $username,
+                contentType: .username,
+                capitalizes: false
+            )
+            AuthenticationField(
+                title: "Password",
+                placeholder: capabilities.initialized && action == .login
+                    ? "Enter your password"
+                    : "At least 10 characters",
+                systemImage: "lock",
+                text: $password,
+                contentType: capabilities.initialized && action == .login
+                    ? .password
+                    : .newPassword,
+                capitalizes: false,
+                isSecure: true
+            )
             errorLabel
             Button { Task { await submit(capabilities) } } label: {
                 HStack { if auth.isWorking { ProgressView() }; Text(buttonTitle(capabilities)).frame(maxWidth: .infinity) }
@@ -146,4 +170,90 @@ struct AuthenticationView: View {
     }
 
     private var stepID: Int { if case .server = step { 0 } else { 1 } }
+}
+
+/// A focused, material-backed field shared by every authentication step.
+private struct AuthenticationField: View {
+    let title: String
+    let placeholder: String
+    let systemImage: String
+    @Binding var text: String
+    var keyboardType: UIKeyboardType = .default
+    var contentType: UITextContentType?
+    var capitalizes = true
+    var isSecure = false
+
+    @FocusState private var isFocused: Bool
+    @State private var revealsSecureText = false
+
+    var body: some View {
+        HStack(spacing: 13) {
+            Image(systemName: systemImage)
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(isFocused ? .primary : .secondary)
+                .frame(width: 22)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(isFocused ? .primary : .secondary)
+
+                field
+                    .font(.body)
+                    .foregroundStyle(.primary)
+            }
+
+            if isSecure && !text.isEmpty {
+                Button {
+                    revealsSecureText.toggle()
+                } label: {
+                    Image(systemName: revealsSecureText ? "eye.slash" : "eye")
+                        .foregroundStyle(.secondary)
+                        .frame(width: 32, height: 32)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(revealsSecureText ? "Hide password" : "Show password")
+            } else if isFocused && !text.isEmpty {
+                Button {
+                    text = ""
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(.tertiary)
+                        .frame(width: 32, height: 32)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Clear \(title.lowercased())")
+            }
+        }
+        .padding(.horizontal, 15)
+        .frame(minHeight: 62)
+        .background {
+            RoundedRectangle(cornerRadius: 17, style: .continuous)
+                .fill(Color.primary.opacity(isFocused ? 0.09 : 0.055))
+        }
+        .overlay {
+            RoundedRectangle(cornerRadius: 17, style: .continuous)
+                .strokeBorder(Color.primary.opacity(isFocused ? 0.28 : 0.09), lineWidth: 1)
+        }
+        .shadow(color: Color.primary.opacity(isFocused ? 0.07 : 0), radius: 12)
+        .contentShape(RoundedRectangle(cornerRadius: 17, style: .continuous))
+        .onTapGesture { isFocused = true }
+        .animation(.easeOut(duration: 0.18), value: isFocused)
+    }
+
+    @ViewBuilder
+    private var field: some View {
+        if isSecure && !revealsSecureText {
+            SecureField(placeholder, text: $text)
+                .focused($isFocused)
+                .textContentType(contentType)
+        } else {
+            TextField(placeholder, text: $text)
+                .focused($isFocused)
+                .textContentType(contentType)
+                .keyboardType(keyboardType)
+                .textInputAutocapitalization(capitalizes ? .sentences : .never)
+                .autocorrectionDisabled(!capitalizes)
+        }
+    }
 }
