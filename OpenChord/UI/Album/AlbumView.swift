@@ -92,7 +92,7 @@ struct AlbumView: View {
 }
 
 /// A track action row that reflects playback and download state.
-private struct TrackRow: View {
+struct TrackRow: View {
     @EnvironmentObject private var downloads: TrackDownloadStore
     let number: Int
     let track: Track
