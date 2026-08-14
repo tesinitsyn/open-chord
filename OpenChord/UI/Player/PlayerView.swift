@@ -211,9 +211,11 @@ struct PlayerView: View {
                 .font(.subheadline.weight(.semibold))
                 .frame(maxWidth: .infinity)
                 .frame(height: 44)
-                .foregroundStyle(isActive ? Color.white : Color.primary)
+                .foregroundStyle(
+                    isActive ? Color(uiColor: .systemBackground) : Color.primary
+                )
                 .background(
-                    isActive ? Color.accentColor : Color.secondary.opacity(0.12),
+                    isActive ? Color.primary : Color.secondary.opacity(0.12),
                     in: Capsule()
                 )
                 .contentTransition(.symbolEffect(.replace))
