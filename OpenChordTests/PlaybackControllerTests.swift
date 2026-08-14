@@ -147,6 +147,25 @@ struct PlaybackControllerTests {
         #expect(controller.upcomingTracks == [third, second])
     }
 
+    @Test("Selecting an upcoming track starts it without rebuilding the queue")
+    func selectingUpcomingTrackStartsPlayback() {
+        let first = makeTrack(title: "First")
+        let second = makeTrack(title: "Second")
+        let third = makeTrack(title: "Third")
+        let engine = ManualPlaybackEngine()
+        let controller = PlaybackController(engine: engine, nowPlaying: NowPlayingManagerRecorder())
+        controller.play(track: first, in: [first, second, third])
+        controller.cycleRepeatMode()
+
+        controller.playQueued(third)
+
+        #expect(controller.currentTrack == third)
+        #expect(controller.queue == [first, second, third])
+        #expect(controller.repeatMode == .all)
+        #expect(engine.loadedTrack == third)
+        #expect(engine.preparedTrack == first)
+    }
+
     @Test("Disabling shuffle restores the source order")
     func disablingShuffleRestoresOrder() {
         let first = makeTrack(title: "First")

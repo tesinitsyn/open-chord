@@ -360,6 +360,15 @@ final class PlaybackController {
         prepareUpcomingTrack()
     }
 
+    func playQueued(_ track: Track) {
+        guard queue.contains(where: { $0.id == track.id }) else { return }
+        currentTrack = track
+        remember(track)
+        publishNowPlaying()
+        engine.load(track, autoplay: true)
+        prepareUpcomingTrack()
+    }
+
     func removeFromQueue(at offsets: IndexSet) {
         guard let currentTrack else { return }
         let removable = offsets.filter { queue[$0].id != currentTrack.id }

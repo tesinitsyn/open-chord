@@ -2,7 +2,6 @@ import SwiftUI
 
 /// Full-screen player presentation with now-playing and synchronized-lyrics pages.
 struct PlayerView: View {
-    @Environment(\.dismiss) private var dismiss
     @Environment(PlaybackController.self) private var player
     @State private var page = PlayerPage.player
 
@@ -34,7 +33,6 @@ struct PlayerView: View {
                 }
             }
             .background(Color(uiColor: .systemBackground))
-            .toolbar { closeToolbar }
         }
         .presentationDragIndicator(.visible)
     }
@@ -72,11 +70,23 @@ struct PlayerView: View {
             }
             .padding(.horizontal, 24)
 
-            HStack(spacing: 44) {
+            HStack(spacing: 25) {
+                Button {
+                    player.toggleShuffle()
+                } label: {
+                    Image(systemName: "shuffle")
+                        .foregroundStyle(player.isShuffleEnabled ? Color.primary : .secondary)
+                        .frame(width: 40, height: 44)
+                }
+                .accessibilityLabel(player.isShuffleEnabled ? "Turn Shuffle Off" : "Turn Shuffle On")
+                .accessibilityValue(player.isShuffleEnabled ? "On" : "Off")
+
                 Button {
                     player.playPrevious()
                 } label: {
-                    Image(systemName: "backward.fill").font(.title)
+                    Image(systemName: "backward.fill")
+                        .font(.title2)
+                        .frame(width: 40, height: 44)
                 }
                 Button {
                     player.togglePlayback()
@@ -87,8 +97,19 @@ struct PlayerView: View {
                 Button {
                     player.playNext()
                 } label: {
-                    Image(systemName: "forward.fill").font(.title)
+                    Image(systemName: "forward.fill")
+                        .font(.title2)
+                        .frame(width: 40, height: 44)
                 }
+                Button {
+                    player.cycleRepeatMode()
+                } label: {
+                    Image(systemName: player.repeatMode.symbol)
+                        .foregroundStyle(player.repeatMode == .off ? .secondary : Color.primary)
+                        .frame(width: 40, height: 44)
+                }
+                .accessibilityLabel(repeatTitle)
+                .accessibilityValue(player.repeatMode == .off ? "Off" : "On")
             }
             .buttonStyle(.plain)
 
@@ -132,7 +153,12 @@ struct PlayerView: View {
                         .foregroundStyle(.secondary)
                 } else {
                     ForEach(player.upcomingTracks) { queuedTrack in
-                        queueRow(queuedTrack, isCurrent: false)
+                        Button {
+                            player.playQueued(queuedTrack)
+                        } label: {
+                            queueRow(queuedTrack, isCurrent: false)
+                        }
+                        .buttonStyle(.plain)
                     }
                     .onDelete(perform: player.removeUpcomingTracks)
                     .onMove(perform: player.moveUpcomingTracks)
@@ -226,15 +252,6 @@ struct PlayerView: View {
         let resolvedPage: PlayerPage = page == destination && destination != .player ? .player : destination
         withAnimation(.smooth(duration: 0.38)) {
             page = resolvedPage
-        }
-    }
-
-    @ToolbarContentBuilder
-    private var closeToolbar: some ToolbarContent {
-        ToolbarItem(placement: .topBarTrailing) {
-            Button("Close", systemImage: "chevron.down") {
-                dismiss()
-            }
         }
     }
 }
