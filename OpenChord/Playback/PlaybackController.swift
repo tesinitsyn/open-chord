@@ -28,19 +28,16 @@ protocol NowPlayingManaging: AnyObject {
 final class SystemNowPlayingManager: NowPlayingManaging {
     private let infoCenter: MPNowPlayingInfoCenter
     private let commandCenter: MPRemoteCommandCenter
-    private let session: URLSession
     private var commandTargets: [(MPRemoteCommand, Any)] = []
     private var artworkTask: Task<Void, Never>?
     private var publishedTrackID: UUID?
 
     init(
         infoCenter: MPNowPlayingInfoCenter = .default(),
-        commandCenter: MPRemoteCommandCenter = .shared(),
-        session: URLSession = .shared
+        commandCenter: MPRemoteCommandCenter = .shared()
     ) {
         self.infoCenter = infoCenter
         self.commandCenter = commandCenter
-        self.session = session
     }
 
     isolated deinit {
@@ -130,10 +127,8 @@ final class SystemNowPlayingManager: NowPlayingManaging {
         artworkTask = Task { [weak self] in
             guard
                 let self,
-                let (data, response) = try? await session.data(from: artworkURL),
+                let data = await ArtworkDataCache.shared.data(for: artworkURL),
                 !Task.isCancelled,
-                let httpResponse = response as? HTTPURLResponse,
-                (200..<300).contains(httpResponse.statusCode),
                 let image = UIImage(data: data),
                 publishedTrackID == track.id,
                 var information = infoCenter.nowPlayingInfo
