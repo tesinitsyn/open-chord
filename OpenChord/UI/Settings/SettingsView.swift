@@ -4,6 +4,7 @@ import SwiftUI
 struct SettingsView: View {
     @EnvironmentObject private var catalog: CatalogStore
     @EnvironmentObject private var downloads: TrackDownloadStore
+    @EnvironmentObject private var auth: AuthSessionStore
     @AppStorage("prefersLightAppearance") private var prefersLightAppearance = false
 
     var body: some View {
@@ -34,6 +35,17 @@ struct SettingsView: View {
                     .padding(.vertical, 4)
                 }
                 .accessibilityIdentifier("serverSettings")
+            }
+
+            if let account = auth.account {
+                Section("Account") {
+                    LabeledContent("Name", value: account.displayName)
+                    LabeledContent("Username", value: account.username)
+                    Button("Sign Out", systemImage: "rectangle.portrait.and.arrow.right", role: .destructive) {
+                        catalog.resetForLogout()
+                        auth.logout()
+                    }
+                }
             }
 
             Section("Library portability") {

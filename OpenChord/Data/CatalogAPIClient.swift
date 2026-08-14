@@ -28,13 +28,15 @@ protocol PlaylistMutating: Sendable {
 /// A GraphQL-backed catalog loader.
 struct CatalogAPIClient: CatalogLoading, PlaylistMutating {
     private let session: URLSession
+    private let tokens: any AccessTokenProviding
 
     /// Creates a catalog client.
     ///
     /// - Parameter session: The session used for requests. Tests can supply an
     ///   isolated session with a custom protocol handler.
-    init(session: URLSession = .shared) {
+    init(session: URLSession = .shared, tokens: any AccessTokenProviding = KeychainTokenStore.shared) {
         self.session = session
+        self.tokens = tokens
     }
 
     /// Fetches and maps the catalog from an OpenChord GraphQL endpoint.
@@ -129,7 +131,8 @@ struct CatalogAPIClient: CatalogLoading, PlaylistMutating {
         playlists playlistDTOs: [PlaylistDTO],
         relativeTo serverURL: URL
     ) -> CatalogSnapshot {
-        let albums = albumDTOs.map { $0.album(relativeTo: serverURL) }
+        let accessToken = tokens.accessToken()
+        let albums = albumDTOs.map { $0.album(relativeTo: serverURL, accessToken: accessToken) }
         var artworkByAlbum: [AlbumArtworkKey: ArtworkStyle] = [:]
         for album in albums {
             artworkByAlbum[
@@ -139,7 +142,7 @@ struct CatalogAPIClient: CatalogLoading, PlaylistMutating {
         return CatalogSnapshot(
             albums: albums,
             playlists: playlistDTOs.map {
-                $0.playlist(relativeTo: serverURL, artworkByAlbum: artworkByAlbum)
+                $0.playlist(relativeTo: serverURL, artworkByAlbum: artworkByAlbum, accessToken: accessToken)
             }
         )
     }
@@ -157,6 +160,7 @@ struct CatalogAPIClient: CatalogLoading, PlaylistMutating {
             "multipart/form-data; boundary=\(boundary)",
             forHTTPHeaderField: "Content-Type"
         )
+        authorize(&request)
         request.httpBody = Self.multipartBody(for: creation, boundary: boundary)
         let (data, response) = try await session.data(for: request)
         guard let response = response as? HTTPURLResponse else {
@@ -167,7 +171,7 @@ struct CatalogAPIClient: CatalogLoading, PlaylistMutating {
         }
         let decoder = Self.decoder()
         let payload = try decoder.decode(PlaylistDTO.self, from: data)
-        return payload.playlist(relativeTo: serverURL, artworkByAlbum: [:])
+        return payload.playlist(relativeTo: serverURL, artworkByAlbum: [:], accessToken: tokens.accessToken())
     }
 
     func renamePlaylist(id: UUID, to name: String, at serverURL: URL) async throws -> Playlist {
@@ -180,7 +184,7 @@ struct CatalogAPIClient: CatalogLoading, PlaylistMutating {
             variables: RenameVariables(id: id, name: name),
             at: serverURL
         )
-        return payload.playlist.playlist(relativeTo: serverURL, artworkByAlbum: [:])
+        return payload.playlist.playlist(relativeTo: serverURL, artworkByAlbum: [:], accessToken: tokens.accessToken())
     }
 
     func deletePlaylist(id: UUID, at serverURL: URL) async throws {
@@ -230,7 +234,7 @@ struct CatalogAPIClient: CatalogLoading, PlaylistMutating {
             variables: MembershipVariables(playlistId: playlistID, trackId: trackID),
             at: serverURL
         )
-        return payload.playlist.playlist(relativeTo: serverURL, artworkByAlbum: [:])
+        return payload.playlist.playlist(relativeTo: serverURL, artworkByAlbum: [:], accessToken: tokens.accessToken())
     }
 
     private func execute<Variables: Encodable, Payload: Decodable>(
@@ -241,6 +245,7 @@ struct CatalogAPIClient: CatalogLoading, PlaylistMutating {
         var request = URLRequest(url: serverURL.appending(path: "graphql"))
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        authorize(&request)
         request.timeoutInterval = 12
         request.httpBody = try JSONEncoder().encode(
             GraphQLRequest(query: query, variables: variables)
@@ -262,6 +267,12 @@ struct CatalogAPIClient: CatalogLoading, PlaylistMutating {
             throw CatalogAPIError.invalidResponse
         }
         return payload
+    }
+
+    private func authorize(_ request: inout URLRequest) {
+        if let token = tokens.accessToken() {
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
     }
 
     private static func decoder() -> JSONDecoder {
@@ -399,11 +410,11 @@ private struct AlbumDTO: Decodable {
     let artist: ArtistDTO
     let tracks: [TrackDTO]
 
-    func album(relativeTo serverURL: URL) -> Album {
+    func album(relativeTo serverURL: URL, accessToken: String?) -> Album {
         let artworkURL =
             artworkUrl
             .flatMap(URL.init(string:))
-            .map { serverURL.replacingPath(with: $0) }
+            .map { serverURL.replacingPath(with: $0).authorizingMedia(with: accessToken) }
         let style = ArtworkStyle.forAlbum(id, remoteURL: artworkURL)
         return Album(
             id: id,
@@ -411,7 +422,7 @@ private struct AlbumDTO: Decodable {
             artist: Artist(id: artist.id, name: artist.name),
             year: year,
             artwork: style,
-            tracks: tracks.map { $0.track(relativeTo: serverURL, artwork: style) }
+            tracks: tracks.map { $0.track(relativeTo: serverURL, artwork: style, accessToken: accessToken) }
         )
     }
 }
@@ -426,7 +437,7 @@ private struct TrackDTO: Decodable {
     let streamUrl: String
     let lyrics: [LyricLineDTO]
 
-    func track(relativeTo serverURL: URL, artwork: ArtworkStyle) -> Track {
+    func track(relativeTo serverURL: URL, artwork: ArtworkStyle, accessToken: String?) -> Track {
         let mediaURL =
             URL(string: streamUrl).map { serverURL.replacingPath(with: $0) }
             ?? serverURL.appending(path: "media/tracks/\(id.uuidString)")
@@ -436,7 +447,7 @@ private struct TrackDTO: Decodable {
             artistName: artistName,
             albumTitle: albumTitle,
             duration: TimeInterval(durationMs) / 1_000,
-            audioSource: .remote(mediaURL),
+            audioSource: .remote(mediaURL.authorizingMedia(with: accessToken)),
             artwork: artwork,
             lyrics: lyrics.map(\.lyricLine)
         )
@@ -454,7 +465,8 @@ private struct PlaylistDTO: Decodable {
 
     func playlist(
         relativeTo serverURL: URL,
-        artworkByAlbum: [AlbumArtworkKey: ArtworkStyle]
+        artworkByAlbum: [AlbumArtworkKey: ArtworkStyle],
+        accessToken: String?
     ) -> Playlist {
         Playlist(
             id: id,
@@ -468,13 +480,14 @@ private struct PlaylistDTO: Decodable {
                     artwork: artworkByAlbum[
                         AlbumArtworkKey(title: $0.albumTitle, artistName: $0.artistName)
                     ]
-                        ?? ArtworkStyle(symbol: "music.note", colors: [.indigo, .violet])
+                        ?? ArtworkStyle(symbol: "music.note", colors: [.indigo, .violet]),
+                    accessToken: accessToken
                 )
             },
             artwork:
                 artworkUrl
                 .flatMap(URL.init(string:))
-                .map { serverURL.replacingPath(with: $0) }
+                .map { serverURL.replacingPath(with: $0).authorizingMedia(with: accessToken) }
                 .map {
                     ArtworkStyle(
                         symbol: "music.note.list",
@@ -509,6 +522,15 @@ private struct LyricLineDTO: Decodable {
 }
 
 private extension URL {
+    func authorizingMedia(with accessToken: String?) -> URL {
+        guard path.hasPrefix("/media/"), let accessToken,
+              var components = URLComponents(url: self, resolvingAgainstBaseURL: false)
+        else { return self }
+        components.queryItems = (components.queryItems ?? [])
+            + [URLQueryItem(name: "access_token", value: accessToken)]
+        return components.url ?? self
+    }
+
     func replacingPath(with remoteURL: URL) -> URL {
         guard var components = URLComponents(url: self, resolvingAgainstBaseURL: false) else {
             return remoteURL
