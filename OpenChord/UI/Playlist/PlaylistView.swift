@@ -12,6 +12,8 @@ struct PlaylistView: View {
     @State private var isRenaming = false
     @State private var editedName = ""
     @State private var isConfirmingDelete = false
+    @State private var isConfirmingDownloadRemoval = false
+    @State private var isAddingMusic = false
 
     var body: some View {
         Group {
@@ -44,6 +46,9 @@ struct PlaylistView: View {
                 .disabled(playlist == nil)
             }
         }
+        .sheet(isPresented: $isAddingMusic) {
+            AddTracksToPlaylistView(playlistID: playlistID)
+        }
         .alert("Rename Playlist", isPresented: $isRenaming) {
             TextField("Playlist name", text: $editedName)
             Button("Cancel", role: .cancel) {}
@@ -59,6 +64,23 @@ struct PlaylistView: View {
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("Tracks and albums will remain in your library.")
+        }
+        .confirmationDialog(
+            "Remove Playlist Downloads?",
+            isPresented: $isConfirmingDownloadRemoval,
+            titleVisibility: .visible
+        ) {
+            Button("Remove Downloads", role: .destructive) {
+                guard let playlist else { return }
+                do {
+                    try downloads.removeDownloads(for: playlist.tracks)
+                } catch {
+                    downloads.errorMessage = error.localizedDescription
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("The playlist remains available for streaming.")
         }
         .alert(
             "Could Not Update Playlist",
@@ -119,7 +141,11 @@ struct PlaylistView: View {
                     .disabled(playlist.tracks.isEmpty)
 
                     Button {
-                        Task { await downloads.download(playlist.tracks) }
+                        if isDownloaded(playlist) {
+                            isConfirmingDownloadRemoval = true
+                        } else {
+                            Task { await downloads.download(playlist.tracks) }
+                        }
                     } label: {
                         Label(downloadTitle(for: playlist), systemImage: downloadSymbol(for: playlist))
                             .font(.subheadline.weight(.semibold))
@@ -132,11 +158,21 @@ struct PlaylistView: View {
                 }
                 .padding(.top, 2)
 
+                Button {
+                    isAddingMusic = true
+                } label: {
+                    Label("Add Music", systemImage: "plus")
+                        .font(.headline)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 44)
+                }
+                .openChordGlassButton()
+
                 if playlist.tracks.isEmpty {
                     ContentUnavailableView(
                         "Playlist Empty",
                         systemImage: "text.badge.plus",
-                        description: Text("Open an album and use a track’s menu to add it here.")
+                        description: Text("Tap Add Music to choose tracks from your library.")
                     )
                     .padding(.top, 12)
                 } else {
@@ -185,17 +221,28 @@ struct PlaylistView: View {
             }
             .buttonStyle(.plain)
 
-            Button("Remove \(track.title)", systemImage: "minus.circle") {
-                Task {
-                    do {
-                        try await catalog.remove(track, from: playlist)
-                    } catch {
-                        mutationError = error.localizedDescription
+            Menu {
+                Button("Play Next", systemImage: "text.line.first.and.arrowtriangle.forward") {
+                    player.playNext(downloads.playable(track))
+                }
+                Button("Add to Queue", systemImage: "text.badge.plus") {
+                    player.addToQueue(downloads.playable(track))
+                }
+                Divider()
+                Button("Remove from Playlist", systemImage: "minus.circle", role: .destructive) {
+                    Task {
+                        do {
+                            try await catalog.remove(track, from: playlist)
+                        } catch {
+                            mutationError = error.localizedDescription
+                        }
                     }
                 }
+            } label: {
+                Image(systemName: "ellipsis")
+                    .frame(width: 36, height: 36)
             }
-            .labelStyle(.iconOnly)
-            .frame(width: 36, height: 36)
+            .accessibilityLabel("More actions for \(track.title)")
         }
         .padding(.vertical, 7)
     }
@@ -205,12 +252,12 @@ struct PlaylistView: View {
     }
 
     private func play(_ playlist: Playlist, shuffled: Bool) {
-        let tracks = shuffled ? playlist.tracks.shuffled() : playlist.tracks
-        guard let first = tracks.first else { return }
-        player.play(
-            track: downloads.playable(first),
-            in: downloads.playable(tracks)
-        )
+        let tracks = downloads.playable(playlist.tracks)
+        if shuffled {
+            player.playShuffled(tracks)
+        } else if let first = tracks.first {
+            player.play(track: first, in: tracks)
+        }
     }
 
     private func isDownloading(_ playlist: Playlist) -> Bool {

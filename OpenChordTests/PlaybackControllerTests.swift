@@ -80,8 +80,8 @@ struct PlaybackControllerTests {
         #expect(controller.elapsed == 10)
     }
 
-    @Test("Next wraps around the queue")
-    func nextTrackWrapsAroundQueue() {
+    @Test("Next stops at the end when repeat is off")
+    func nextTrackStopsAtQueueEnd() {
         let first = makeTrack(title: "First")
         let second = makeTrack(title: "Second")
         let controller = PlaybackController(
@@ -92,8 +92,77 @@ struct PlaybackControllerTests {
 
         controller.playNext()
 
+        #expect(controller.currentTrack == second)
+    }
+
+    @Test("Repeat all wraps around the queue")
+    func repeatAllWrapsQueue() {
+        let first = makeTrack(title: "First")
+        let second = makeTrack(title: "Second")
+        let controller = PlaybackController(
+            engine: ManualPlaybackEngine(),
+            nowPlaying: NowPlayingManagerRecorder()
+        )
+        controller.play(track: second, in: [first, second])
+        controller.cycleRepeatMode()
+
+        controller.playNext()
+
         #expect(controller.currentTrack == first)
-        #expect(controller.elapsed == 0)
+    }
+
+    @Test("Repeat one prepares the current track again")
+    func repeatOnePreparesCurrentTrack() {
+        let engine = ManualPlaybackEngine()
+        let track = makeTrack()
+        let controller = PlaybackController(engine: engine, nowPlaying: NowPlayingManagerRecorder())
+        controller.play(track: track, in: [track])
+        controller.cycleRepeatMode()
+        controller.cycleRepeatMode()
+
+        #expect(controller.repeatMode == .one)
+        #expect(engine.preparedTrack == track)
+    }
+
+    @Test("Queue supports play next, append, removal and reordering")
+    func editsUpcomingQueue() {
+        let first = makeTrack(title: "First")
+        let second = makeTrack(title: "Second")
+        let third = makeTrack(title: "Third")
+        let fourth = makeTrack(title: "Fourth")
+        let controller = PlaybackController(
+            engine: ManualPlaybackEngine(),
+            nowPlaying: NowPlayingManagerRecorder()
+        )
+        controller.play(track: first, in: [first, second])
+
+        controller.addToQueue(third)
+        controller.playNext(fourth)
+        #expect(controller.upcomingTracks == [fourth, second, third])
+
+        controller.moveUpcomingTracks(from: [2], to: 0)
+        #expect(controller.upcomingTracks == [third, fourth, second])
+
+        controller.removeUpcomingTracks(at: [1])
+        #expect(controller.upcomingTracks == [third, second])
+    }
+
+    @Test("Disabling shuffle restores the source order")
+    func disablingShuffleRestoresOrder() {
+        let first = makeTrack(title: "First")
+        let second = makeTrack(title: "Second")
+        let third = makeTrack(title: "Third")
+        let controller = PlaybackController(
+            engine: ManualPlaybackEngine(),
+            nowPlaying: NowPlayingManagerRecorder()
+        )
+        controller.play(track: first, in: [first, second, third])
+        controller.toggleShuffle()
+
+        controller.toggleShuffle()
+
+        #expect(!controller.isShuffleEnabled)
+        #expect(controller.queue == [first, second, third])
     }
 
     @Test("Previous restarts a track after four seconds")

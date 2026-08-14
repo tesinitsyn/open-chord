@@ -16,6 +16,8 @@ final class TrackDownloadStore: ObservableObject {
     }
 
     @Published private(set) var states: [UUID: State] = [:]
+    @Published private(set) var downloadedTrackCount = 0
+    @Published private(set) var downloadedBytes: Int64 = 0
     @Published var errorMessage: String?
 
     private let session: URLSession
@@ -33,6 +35,7 @@ final class TrackDownloadStore: ObservableObject {
             .appending(path: "OpenChord/Downloads", directoryHint: .isDirectory)
         self.downloadsDirectory = baseDirectory
         try? fileManager.createDirectory(at: baseDirectory, withIntermediateDirectories: true)
+        refreshStorageSummary()
     }
 
     func state(for track: Track) -> State {
@@ -68,6 +71,7 @@ final class TrackDownloadStore: ObservableObject {
             }
             try FileManager.default.moveItem(at: temporaryURL, to: destination)
             states[track.id] = .downloaded
+            refreshStorageSummary()
         } catch {
             states[track.id] = .failed
             errorMessage = "Couldn’t download “\(track.title)”. \(error.localizedDescription)"
@@ -81,6 +85,27 @@ final class TrackDownloadStore: ObservableObject {
         for track in tracks where state(for: track) != .downloaded {
             await download(track)
         }
+    }
+
+    func removeDownload(for track: Track) throws {
+        guard let url = localURL(for: track) else { return }
+        try FileManager.default.removeItem(at: url)
+        states[track.id] = .idle
+        refreshStorageSummary()
+    }
+
+    func removeDownloads(for tracks: [Track]) throws {
+        for track in tracks {
+            try removeDownload(for: track)
+        }
+    }
+
+    func removeAllDownloads() throws {
+        for url in downloadedFiles() {
+            try FileManager.default.removeItem(at: url)
+        }
+        states.removeAll()
+        refreshStorageSummary()
     }
 
     /// Resolves a track to its local copy when one exists.
@@ -102,6 +127,22 @@ final class TrackDownloadStore: ObservableObject {
         return try? FileManager.default
             .contentsOfDirectory(at: downloadsDirectory, includingPropertiesForKeys: nil)
             .first { $0.lastPathComponent.lowercased().hasPrefix(prefix) }
+    }
+
+    private func downloadedFiles() -> [URL] {
+        (try? FileManager.default.contentsOfDirectory(
+            at: downloadsDirectory,
+            includingPropertiesForKeys: [.fileSizeKey],
+            options: [.skipsHiddenFiles]
+        )) ?? []
+    }
+
+    private func refreshStorageSummary() {
+        let files = downloadedFiles()
+        downloadedTrackCount = files.count
+        downloadedBytes = files.reduce(into: 0) { result, url in
+            result += Int64((try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0)
+        }
     }
 
     private func destinationURL(for track: Track, response: HTTPURLResponse) -> URL {

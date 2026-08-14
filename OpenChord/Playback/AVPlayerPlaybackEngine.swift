@@ -30,13 +30,15 @@ final class SystemPlaybackAudioSession: PlaybackAudioSession {
 /// controller and SwiftUI views continue to depend only on playback semantics.
 @MainActor
 final class AVPlayerPlaybackEngine: PlaybackEngine {
-    private let player: AVPlayer
+    private let player: AVQueuePlayer
     private let bundle: Bundle
     private let audioSession: any PlaybackAudioSession
     private let stateSubject = CurrentValueSubject<PlaybackEngineState, Never>(.init())
     private let eventSubject = PassthroughSubject<PlaybackEngineEvent, Never>()
     private var timeObserver: Any?
     private var endObserver: NSObjectProtocol?
+    private var preparedItem: AVPlayerItem?
+    private var preparedDuration: TimeInterval = 0
 
     var state: AnyPublisher<PlaybackEngineState, Never> {
         stateSubject.eraseToAnyPublisher()
@@ -47,7 +49,7 @@ final class AVPlayerPlaybackEngine: PlaybackEngine {
     }
 
     init(
-        player: AVPlayer = AVPlayer(),
+        player: AVQueuePlayer = AVQueuePlayer(),
         bundle: Bundle = .main,
         audioSession: any PlaybackAudioSession = SystemPlaybackAudioSession()
     ) {
@@ -55,6 +57,7 @@ final class AVPlayerPlaybackEngine: PlaybackEngine {
         self.bundle = bundle
         self.audioSession = audioSession
         installTimeObserver()
+        observeItemCompletion()
     }
 
     isolated deinit {
@@ -68,14 +71,16 @@ final class AVPlayerPlaybackEngine: PlaybackEngine {
 
     func load(_ track: Track, autoplay: Bool) {
         guard let url = track.audioSource.url(in: bundle) else {
-            player.replaceCurrentItem(with: nil)
+            player.removeAllItems()
+            preparedItem = nil
             stateSubject.send(.init())
             return
         }
 
         let item = AVPlayerItem(url: url)
-        observeEnd(of: item)
-        player.replaceCurrentItem(with: item)
+        player.removeAllItems()
+        player.insert(item, after: nil)
+        preparedItem = nil
         stateSubject.send(
             PlaybackEngineState(
                 elapsed: 0,
@@ -88,6 +93,23 @@ final class AVPlayerPlaybackEngine: PlaybackEngine {
             try? audioSession.activate()
             player.play()
         }
+    }
+
+    func prepareNext(_ track: Track?) {
+        if let preparedItem {
+            player.remove(preparedItem)
+            self.preparedItem = nil
+        }
+        guard
+            let track,
+            let url = track.audioSource.url(in: bundle),
+            let currentItem = player.currentItem
+        else { return }
+
+        let item = AVPlayerItem(url: url)
+        preparedItem = item
+        preparedDuration = max(0, track.duration)
+        player.insert(item, after: currentItem)
     }
 
     func play() {
@@ -129,22 +151,22 @@ final class AVPlayerPlaybackEngine: PlaybackEngine {
         }
     }
 
-    private func observeEnd(of item: AVPlayerItem) {
-        if let endObserver {
-            NotificationCenter.default.removeObserver(endObserver)
-        }
-
+    private func observeItemCompletion() {
         endObserver = NotificationCenter.default.addObserver(
             forName: AVPlayerItem.didPlayToEndTimeNotification,
-            object: item,
+            object: nil,
             queue: .main
-        ) { [weak self] _ in
+        ) { [weak self] notification in
+            let isPlayerItem = notification.object is AVPlayerItem
             Task { @MainActor [weak self] in
                 guard let self else { return }
+                guard isPlayerItem else { return }
                 self.updateState {
-                    $0.elapsed = $0.duration
-                    $0.isPlaying = false
+                    $0.elapsed = self.preparedItem == nil ? $0.duration : 0
+                    $0.duration = self.preparedItem == nil ? $0.duration : self.preparedDuration
+                    $0.isPlaying = self.player.rate != 0
                 }
+                self.preparedItem = nil
                 self.eventSubject.send(.finished)
             }
         }

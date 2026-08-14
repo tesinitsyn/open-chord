@@ -7,26 +7,27 @@ struct PlayerView: View {
     @State private var page = PlayerPage.player
 
     /// Sections available within the full player presentation.
-    private enum PlayerPage: String, CaseIterable {
-        case player = "Now Playing"
-        case lyrics = "Lyrics"
+    private enum PlayerPage {
+        case player
+        case lyrics
+        case queue
     }
 
     var body: some View {
         NavigationStack {
             Group {
                 if let track = player.currentTrack {
-                    VStack(spacing: 18) {
-                        Picker("Player section", selection: $page) {
-                            ForEach(PlayerPage.allCases, id: \.self) { Text($0.rawValue).tag($0) }
-                        }
-                        .pickerStyle(.segmented)
-                        .padding(.horizontal)
-
-                        switch page {
-                        case .player: nowPlaying(track)
-                        case .lyrics: LyricsView(track: track)
-                        }
+                    switch page {
+                    case .player:
+                        nowPlaying(track)
+                            .transition(.opacity.combined(with: .scale(scale: 0.98)))
+                    case .lyrics:
+                        LyricsView(track: track)
+                            .safeAreaInset(edge: .bottom) { pageNavigation }
+                            .transition(.move(edge: .trailing).combined(with: .opacity))
+                    case .queue:
+                        queueView(track)
+                            .transition(.move(edge: .trailing).combined(with: .opacity))
                     }
                 } else {
                     ContentUnavailableView("Nothing Playing", systemImage: "music.note")
@@ -34,7 +35,17 @@ struct PlayerView: View {
             }
             .background(Color(uiColor: .systemBackground))
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
+                if page != .player {
+                    ToolbarItem(placement: .topBarLeading) {
+                        Button("Now Playing", systemImage: "chevron.left") {
+                            changePage(to: .player)
+                        }
+                    }
+                }
+                ToolbarItemGroup(placement: .topBarTrailing) {
+                    if page == .queue {
+                        EditButton()
+                    }
                     Button("Close", systemImage: "chevron.down") { dismiss() }
                 }
             }
@@ -95,7 +106,146 @@ struct PlayerView: View {
             }
             .buttonStyle(.plain)
 
+            HStack(spacing: 86) {
+                Button {
+                    changePage(to: .lyrics)
+                } label: {
+                    Image(systemName: "quote.bubble")
+                        .frame(width: 44, height: 44)
+                }
+                .accessibilityLabel("Show Lyrics")
+
+                Button {
+                    changePage(to: .queue)
+                } label: {
+                    Image(systemName: "list.bullet")
+                        .frame(width: 44, height: 44)
+                }
+                .accessibilityLabel("Show Queue")
+            }
+            .buttonStyle(.plain)
+
             Spacer()
+        }
+    }
+
+    private func queueView(_ track: Track) -> some View {
+        List {
+            Section {
+                HStack(spacing: 12) {
+                    playbackModeButton(
+                        title: "Shuffle",
+                        symbol: "shuffle",
+                        isActive: player.isShuffleEnabled
+                    ) {
+                        player.toggleShuffle()
+                    }
+                    playbackModeButton(
+                        title: repeatTitle,
+                        symbol: player.repeatMode.symbol,
+                        isActive: player.repeatMode != .off
+                    ) {
+                        player.cycleRepeatMode()
+                    }
+                }
+                .listRowInsets(EdgeInsets())
+                .listRowBackground(Color.clear)
+            }
+
+            Section("Now Playing") {
+                queueRow(track, isCurrent: true)
+            }
+            Section("Playing Next") {
+                if player.upcomingTracks.isEmpty {
+                    Text("The queue ends after this track.")
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(player.upcomingTracks) { queuedTrack in
+                        queueRow(queuedTrack, isCurrent: false)
+                    }
+                    .onDelete(perform: player.removeUpcomingTracks)
+                    .onMove(perform: player.moveUpcomingTracks)
+                }
+            }
+        }
+        .listStyle(.insetGrouped)
+    }
+
+    private var pageNavigation: some View {
+        HStack(spacing: 86) {
+            Button {
+                changePage(to: .player)
+            } label: {
+                Image(systemName: "waveform")
+                    .frame(width: 44, height: 44)
+            }
+            .accessibilityLabel("Show Now Playing")
+
+            Button {
+                changePage(to: .queue)
+            } label: {
+                Image(systemName: "list.bullet")
+                    .frame(width: 44, height: 44)
+            }
+            .accessibilityLabel("Show Queue")
+        }
+        .buttonStyle(.plain)
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 8)
+        .background(.ultraThinMaterial)
+    }
+
+    private func playbackModeButton(
+        title: String,
+        symbol: String,
+        isActive: Bool,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Label(title, systemImage: symbol)
+                .font(.subheadline.weight(.semibold))
+                .frame(maxWidth: .infinity)
+                .frame(height: 44)
+                .foregroundStyle(isActive ? Color.white : Color.primary)
+                .background(
+                    isActive ? Color.accentColor : Color.secondary.opacity(0.12),
+                    in: Capsule()
+                )
+                .contentTransition(.symbolEffect(.replace))
+        }
+        .buttonStyle(.plain)
+        .accessibilityValue(isActive ? "On" : "Off")
+    }
+
+    private func queueRow(_ track: Track, isCurrent: Bool) -> some View {
+        HStack(spacing: 12) {
+            ArtworkView(style: track.artwork, cornerRadius: 6)
+                .frame(width: 44, height: 44)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(track.title).lineLimit(1)
+                Text(track.artistName).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+            }
+            Spacer()
+            if isCurrent {
+                Image(systemName: player.isPlaying ? "waveform" : "pause.fill")
+                    .foregroundStyle(Color.accentColor)
+                    .accessibilityHidden(true)
+            }
+        }
+        .accessibilityElement(children: .combine)
+    }
+
+    private var repeatTitle: String {
+        switch player.repeatMode {
+        case .off: "Repeat"
+        case .all: "Repeat All"
+        case .one: "Repeat One"
+        }
+    }
+
+    private func changePage(to destination: PlayerPage) {
+        withAnimation(.snappy(duration: 0.32)) {
+            page = destination
         }
     }
 }

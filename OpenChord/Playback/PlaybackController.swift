@@ -2,6 +2,7 @@ import Combine
 import Foundation
 import MediaPlayer
 import Observation
+import SwiftUI
 import UIKit
 
 /// Commands exposed by the system's Lock Screen and Control Center surfaces.
@@ -170,6 +171,14 @@ final class SystemNowPlayingManager: NowPlayingManaging {
 /// independently so playback ticks do not invalidate unrelated catalog views.
 @Observable
 final class PlaybackController {
+    enum RepeatMode: String, CaseIterable {
+        case off
+        case all
+        case one
+
+        var symbol: String { self == .one ? "repeat.1" : "repeat" }
+    }
+
     static let lastPlayedTrackIDKey = "openchord.lastPlayedTrackID"
 
     private(set) var currentTrack: Track?
@@ -177,6 +186,8 @@ final class PlaybackController {
     private(set) var queue: [Track] = []
     private(set) var isPlaying = false
     private(set) var elapsed: TimeInterval = 0
+    private(set) var isShuffleEnabled = false
+    private(set) var repeatMode: RepeatMode = .off
     var isPlayerPresented = false
 
     @ObservationIgnored
@@ -187,6 +198,8 @@ final class PlaybackController {
     private let defaults: UserDefaults
     @ObservationIgnored
     private var subscriptions = Set<AnyCancellable>()
+    @ObservationIgnored
+    private var originalQueue: [Track] = []
 
     init(
         engine: any PlaybackEngine = AVPlayerPlaybackEngine(),
@@ -212,10 +225,10 @@ final class PlaybackController {
                 }
 
                 if Thread.isMainThread {
-                    self?.playNext()
+                    self?.advanceAfterCompletion()
                 } else {
                     DispatchQueue.main.async { [weak self] in
-                        self?.playNext()
+                        self?.advanceAfterCompletion()
                     }
                 }
             }
@@ -243,12 +256,28 @@ final class PlaybackController {
         if currentTrack?.id != track.id {
             currentTrack = track
             queue = tracks
+            originalQueue = tracks
+            isShuffleEnabled = false
             remember(track)
             publishNowPlaying()
             engine.load(track, autoplay: true)
+            prepareUpcomingTrack()
         } else {
             resume()
         }
+    }
+
+    func playShuffled(_ tracks: [Track]) {
+        let shuffled = tracks.shuffled()
+        guard let first = shuffled.first else { return }
+        currentTrack = first
+        queue = shuffled
+        originalQueue = tracks
+        isShuffleEnabled = true
+        remember(first)
+        publishNowPlaying()
+        engine.load(first, autoplay: true)
+        prepareUpcomingTrack()
     }
 
     func togglePlayback() {
@@ -267,7 +296,7 @@ final class PlaybackController {
     }
 
     func playNext() {
-        moveQueue(by: 1)
+        moveQueue(by: 1, wraps: repeatMode == .all)
     }
 
     func playPrevious() {
@@ -276,8 +305,76 @@ final class PlaybackController {
         if elapsed > 4 {
             seek(to: 0)
         } else {
-            moveQueue(by: -1)
+            moveQueue(by: -1, wraps: repeatMode == .all)
         }
+    }
+
+    func toggleShuffle() {
+        guard let currentTrack, queue.count > 1 else { return }
+        if isShuffleEnabled {
+            queue = originalQueue
+            if !queue.contains(where: { $0.id == currentTrack.id }) {
+                queue.insert(currentTrack, at: 0)
+            }
+        } else {
+            let upcoming = queue.filter { $0.id != currentTrack.id }.shuffled()
+            queue = [currentTrack] + upcoming
+        }
+        isShuffleEnabled.toggle()
+        publishNowPlaying()
+        prepareUpcomingTrack()
+    }
+
+    func cycleRepeatMode() {
+        switch repeatMode {
+        case .off: repeatMode = .all
+        case .all: repeatMode = .one
+        case .one: repeatMode = .off
+        }
+        prepareUpcomingTrack()
+    }
+
+    func playNext(_ track: Track) {
+        guard let currentTrack else {
+            play(track: track, in: [track])
+            return
+        }
+        guard track.id != currentTrack.id else { return }
+        queue.removeAll { $0.id == track.id }
+        let index = queue.firstIndex { $0.id == currentTrack.id } ?? 0
+        queue.insert(track, at: min(index + 1, queue.endIndex))
+        appendToOriginalQueueIfNeeded(track)
+        publishNowPlaying()
+        prepareUpcomingTrack()
+    }
+
+    func addToQueue(_ track: Track) {
+        guard currentTrack != nil else {
+            play(track: track, in: [track])
+            return
+        }
+        guard !queue.contains(where: { $0.id == track.id }) else { return }
+        queue.append(track)
+        appendToOriginalQueueIfNeeded(track)
+        publishNowPlaying()
+        prepareUpcomingTrack()
+    }
+
+    func removeFromQueue(at offsets: IndexSet) {
+        guard let currentTrack else { return }
+        let removable = offsets.filter { queue[$0].id != currentTrack.id }
+        let removedIDs = Set(removable.map { queue[$0].id })
+        queue.remove(atOffsets: IndexSet(removable))
+        originalQueue.removeAll { removedIDs.contains($0.id) }
+        publishNowPlaying()
+        prepareUpcomingTrack()
+    }
+
+    func moveQueueItems(from source: IndexSet, to destination: Int) {
+        queue.move(fromOffsets: source, toOffset: destination)
+        if !isShuffleEnabled { originalQueue = queue }
+        publishNowPlaying()
+        prepareUpcomingTrack()
     }
 
     var progress: Double {
@@ -285,19 +382,100 @@ final class PlaybackController {
         return elapsed / duration
     }
 
-    private func moveQueue(by offset: Int) {
+    var upcomingTracks: [Track] {
+        guard
+            let currentTrack,
+            let index = queue.firstIndex(where: { $0.id == currentTrack.id }),
+            queue.indices.contains(index + 1)
+        else { return [] }
+        return Array(queue[(index + 1)...])
+    }
+
+    func removeUpcomingTracks(at offsets: IndexSet) {
+        guard
+            let currentTrack,
+            let currentIndex = queue.firstIndex(where: { $0.id == currentTrack.id })
+        else { return }
+        removeFromQueue(at: IndexSet(offsets.map { currentIndex + 1 + $0 }))
+    }
+
+    func moveUpcomingTracks(from source: IndexSet, to destination: Int) {
+        guard
+            let currentTrack,
+            let currentIndex = queue.firstIndex(where: { $0.id == currentTrack.id })
+        else { return }
+        var upcoming = upcomingTracks
+        upcoming.move(fromOffsets: source, toOffset: destination)
+        queue = Array(queue[...currentIndex]) + upcoming
+        if !isShuffleEnabled { originalQueue = queue }
+        publishNowPlaying()
+        prepareUpcomingTrack()
+    }
+
+    private func moveQueue(by offset: Int, wraps: Bool) {
         guard
             let currentTrack,
             let currentIndex = queue.firstIndex(where: { $0.id == currentTrack.id }),
             !queue.isEmpty
         else { return }
 
-        let newIndex = (currentIndex + offset + queue.count) % queue.count
+        let proposedIndex = currentIndex + offset
+        guard wraps || queue.indices.contains(proposedIndex) else { return }
+        let newIndex = (proposedIndex + queue.count) % queue.count
         let nextTrack = queue[newIndex]
         self.currentTrack = nextTrack
         remember(nextTrack)
         publishNowPlaying()
         engine.load(nextTrack, autoplay: true)
+        prepareUpcomingTrack()
+    }
+
+    private func advanceAfterCompletion() {
+        guard let currentTrack else { return }
+        if repeatMode == .one {
+            remember(currentTrack)
+            publishNowPlaying()
+            prepareUpcomingTrack()
+            return
+        }
+        guard let index = queue.firstIndex(where: { $0.id == currentTrack.id }) else { return }
+        let nextIndex = index + 1
+        if queue.indices.contains(nextIndex) {
+            self.currentTrack = queue[nextIndex]
+        } else if repeatMode == .all, let first = queue.first {
+            self.currentTrack = first
+        } else {
+            engine.prepareNext(nil)
+            return
+        }
+        guard let nextTrack = self.currentTrack else { return }
+        remember(nextTrack)
+        publishNowPlaying()
+        prepareUpcomingTrack()
+    }
+
+    private func prepareUpcomingTrack() {
+        guard let currentTrack else {
+            engine.prepareNext(nil)
+            return
+        }
+        if repeatMode == .one {
+            engine.prepareNext(currentTrack)
+            return
+        }
+        guard let index = queue.firstIndex(where: { $0.id == currentTrack.id }) else {
+            engine.prepareNext(nil)
+            return
+        }
+        if queue.indices.contains(index + 1) {
+            engine.prepareNext(queue[index + 1])
+        } else {
+            engine.prepareNext(repeatMode == .all ? queue.first : nil)
+        }
+    }
+
+    private func appendToOriginalQueueIfNeeded(_ track: Track) {
+        if !originalQueue.contains(where: { $0.id == track.id }) { originalQueue.append(track) }
     }
 
     private func resume() {
