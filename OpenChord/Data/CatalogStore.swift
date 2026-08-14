@@ -76,6 +76,11 @@ final class CatalogStore: ObservableObject {
     /// - Throws: ``ServerAddressError/invalid`` when `address` cannot be
     ///   normalized to an allowed server URL.
     func updateServerAddress(_ address: String) async throws {
+        try configureServerAddress(address)
+        await reload()
+    }
+
+    func configureServerAddress(_ address: String) throws {
         guard let url = Self.normalizedURL(from: address) else {
             throw ServerAddressError.invalid
         }
@@ -84,7 +89,14 @@ final class CatalogStore: ObservableObject {
         hasLoaded = false
         albums = []
         playlists = []
-        await reload()
+        connectionState = .unknown
+    }
+
+    func resetForLogout() {
+        hasLoaded = false
+        albums = []
+        playlists = []
+        connectionState = .unknown
     }
 
     /// Creates a server-backed playlist and inserts it at the top of the library.
