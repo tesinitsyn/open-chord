@@ -32,8 +32,9 @@ struct ArtworkDataCacheTests {
 }
 
 private final class ArtworkURLProtocol: URLProtocol, @unchecked Sendable {
-    static let imageData = Data(base64Encoded:
-        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
+    static let imageData = Data(
+        base64Encoded:
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
     )!
     private static let lock = NSLock()
     nonisolated(unsafe) private static var requests = 0

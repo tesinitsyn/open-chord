@@ -21,11 +21,11 @@ struct OpenChordApp: App {
                     AuthenticationView()
                 }
             }
-                .environment(player)
-                .environmentObject(catalog)
-                .environmentObject(downloads)
-                .environmentObject(auth)
-                .preferredColorScheme(prefersLightAppearance ? .light : .dark)
+            .environment(player)
+            .environmentObject(catalog)
+            .environmentObject(downloads)
+            .environmentObject(auth)
+            .preferredColorScheme(prefersLightAppearance ? .light : .dark)
         }
     }
 }

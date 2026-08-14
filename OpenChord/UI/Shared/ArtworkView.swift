@@ -104,9 +104,10 @@ actor ArtworkDataCache {
         directory: URL? = nil
     ) {
         self.session = session
-        self.directory = directory
+        self.directory =
+            directory
             ?? fileManager.urls(for: .cachesDirectory, in: .userDomainMask)[0]
-                .appendingPathComponent("Artwork", isDirectory: true)
+            .appendingPathComponent("Artwork", isDirectory: true)
         try? fileManager.createDirectory(
             at: self.directory,
             withIntermediateDirectories: true

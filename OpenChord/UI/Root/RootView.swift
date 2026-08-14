@@ -274,9 +274,9 @@ private struct MiniPlayerArtwork: View {
 
     var body: some View {
         ArtworkView(style: style, cornerRadius: cornerRadius)
-        .frame(width: size, height: size)
-        .contentShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
-        .accessibilityHidden(true)
+            .frame(width: size, height: size)
+            .contentShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+            .accessibilityHidden(true)
     }
 }
 

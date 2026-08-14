@@ -524,9 +524,10 @@ private struct LyricLineDTO: Decodable {
 private extension URL {
     func authorizingMedia(with accessToken: String?) -> URL {
         guard path.hasPrefix("/media/"), let accessToken,
-              var components = URLComponents(url: self, resolvingAgainstBaseURL: false)
+            var components = URLComponents(url: self, resolvingAgainstBaseURL: false)
         else { return self }
-        components.queryItems = (components.queryItems ?? [])
+        components.queryItems =
+            (components.queryItems ?? [])
             + [URLQueryItem(name: "access_token", value: accessToken)]
         return components.url ?? self
     }

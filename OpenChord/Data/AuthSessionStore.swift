@@ -46,7 +46,7 @@ final class KeychainTokenStore: AccessTokenProviding, @unchecked Sendable {
         query[kSecMatchLimit as String] = kSecMatchLimitOne
         var result: CFTypeRef?
         guard SecItemCopyMatching(query as CFDictionary, &result) == errSecSuccess,
-              let data = result as? Data
+            let data = result as? Data
         else { return nil }
         return String(data: data, encoding: .utf8)
     }
@@ -64,10 +64,12 @@ final class KeychainTokenStore: AccessTokenProviding, @unchecked Sendable {
     }
 
     private func baseQuery(_ account: String) -> [String: Any] {
-        [kSecClass as String: kSecClassGenericPassword,
-         kSecAttrService as String: service,
-         kSecAttrAccount as String: account,
-         kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly]
+        [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: account,
+            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly,
+        ]
     }
 }
 
@@ -80,18 +82,34 @@ struct AuthAPIClient {
     }
 
     func login(username: String, password: String, at serverURL: URL) async throws -> AuthPayload {
-        try await request(path: "api/auth/login", body: LoginBody(username: username, password: password, deviceName: Self.deviceName), at: serverURL)
+        try await request(
+            path: "api/auth/login",
+            body: LoginBody(username: username, password: password, deviceName: Self.deviceName), at: serverURL)
     }
 
-    func register(username: String, displayName: String, password: String, at serverURL: URL) async throws -> AuthPayload {
-        try await request(path: "api/auth/register", body: CredentialsBody(username: username, displayName: displayName, password: password, deviceName: Self.deviceName), at: serverURL)
+    func register(username: String, displayName: String, password: String, at serverURL: URL) async throws
+        -> AuthPayload
+    {
+        try await request(
+            path: "api/auth/register",
+            body: CredentialsBody(
+                username: username, displayName: displayName, password: password, deviceName: Self.deviceName),
+            at: serverURL)
     }
 
-    func setup(username: String, displayName: String, password: String, mode: ServerMode, at serverURL: URL) async throws -> AuthPayload {
-        try await request(path: "api/auth/setup", body: SetupBody(username: username, displayName: displayName, password: password, deviceName: Self.deviceName, mode: mode), at: serverURL)
+    func setup(username: String, displayName: String, password: String, mode: ServerMode, at serverURL: URL)
+        async throws -> AuthPayload
+    {
+        try await request(
+            path: "api/auth/setup",
+            body: SetupBody(
+                username: username, displayName: displayName, password: password, deviceName: Self.deviceName,
+                mode: mode), at: serverURL)
     }
 
-    private func request<Body: Encodable, Response: Decodable>(path: String, method: String = "POST", body: Body?, at serverURL: URL) async throws -> Response {
+    private func request<Body: Encodable, Response: Decodable>(
+        path: String, method: String = "POST", body: Body?, at serverURL: URL
+    ) async throws -> Response {
         var request = URLRequest(url: serverURL.appending(path: path))
         request.httpMethod = method
         request.timeoutInterval = 15
@@ -117,8 +135,12 @@ struct AuthPayload: Decodable {
 }
 
 private struct LoginBody: Encodable { let username: String; let password: String; let deviceName: String }
-private struct CredentialsBody: Encodable { let username: String; let displayName: String; let password: String; let deviceName: String }
-private struct SetupBody: Encodable { let username: String; let displayName: String; let password: String; let deviceName: String; let mode: ServerMode }
+private struct CredentialsBody: Encodable {
+    let username: String; let displayName: String; let password: String; let deviceName: String
+}
+private struct SetupBody: Encodable {
+    let username: String; let displayName: String; let password: String; let deviceName: String; let mode: ServerMode
+}
 private struct ServerError: Decodable { let message: String }
 
 enum AuthError: LocalizedError {
@@ -154,9 +176,20 @@ final class AuthSessionStore: ObservableObject {
 
     func capabilities(at url: URL) async throws -> ServerCapabilities { try await client.capabilities(at: url) }
 
-    func login(username: String, password: String, serverURL: URL) async { await perform { try await client.login(username: username, password: password, at: serverURL) } }
-    func register(username: String, displayName: String, password: String, serverURL: URL) async { await perform { try await client.register(username: username, displayName: displayName, password: password, at: serverURL) } }
-    func setup(username: String, displayName: String, password: String, mode: ServerMode, serverURL: URL) async { await perform { try await client.setup(username: username, displayName: displayName, password: password, mode: mode, at: serverURL) } }
+    func login(username: String, password: String, serverURL: URL) async {
+        await perform { try await client.login(username: username, password: password, at: serverURL) }
+    }
+    func register(username: String, displayName: String, password: String, serverURL: URL) async {
+        await perform {
+            try await client.register(username: username, displayName: displayName, password: password, at: serverURL)
+        }
+    }
+    func setup(username: String, displayName: String, password: String, mode: ServerMode, serverURL: URL) async {
+        await perform {
+            try await client.setup(
+                username: username, displayName: displayName, password: password, mode: mode, at: serverURL)
+        }
+    }
 
     func logout() {
         tokens.clear()

@@ -64,10 +64,15 @@ struct AuthenticationView: View {
                 contentType: .URL,
                 capitalizes: false
             )
-                .accessibilityIdentifier("authServerAddress")
+            .accessibilityIdentifier("authServerAddress")
             errorLabel
-            Button { Task { await connect() } } label: {
-                HStack { if checking { ProgressView() }; Text(checking ? "Connecting…" : "Continue").frame(maxWidth: .infinity) }
+            Button {
+                Task { await connect() }
+            } label: {
+                HStack {
+                    if checking { ProgressView() };
+                    Text(checking ? "Connecting…" : "Continue").frame(maxWidth: .infinity)
+                }
             }
             .buttonStyle(.borderedProminent)
             .controlSize(.large)
@@ -93,8 +98,12 @@ struct AuthenticationView: View {
                     Text("Family").tag(ServerMode.family)
                 }
                 .pickerStyle(.segmented)
-                Text(mode == .family ? "Anyone with this server URL can create a member account." : "Only this owner account will be allowed.")
-                    .font(.footnote).foregroundStyle(.secondary)
+                Text(
+                    mode == .family
+                        ? "Anyone with this server URL can create a member account."
+                        : "Only this owner account will be allowed."
+                )
+                .font(.footnote).foregroundStyle(.secondary)
             }
             if !capabilities.initialized || action == .register {
                 AuthenticationField(
@@ -127,11 +136,17 @@ struct AuthenticationView: View {
                 isSecure: true
             )
             errorLabel
-            Button { Task { await submit(capabilities) } } label: {
-                HStack { if auth.isWorking { ProgressView() }; Text(buttonTitle(capabilities)).frame(maxWidth: .infinity) }
+            Button {
+                Task { await submit(capabilities) }
+            } label: {
+                HStack {
+                    if auth.isWorking { ProgressView() }; Text(buttonTitle(capabilities)).frame(maxWidth: .infinity)
+                }
             }
             .buttonStyle(.borderedProminent).controlSize(.large)
-            .disabled(auth.isWorking || username.isEmpty || password.isEmpty || ((!capabilities.initialized || action == .register) && displayName.isEmpty))
+            .disabled(
+                auth.isWorking || username.isEmpty || password.isEmpty
+                    || ((!capabilities.initialized || action == .register) && displayName.isEmpty))
         }
     }
 
@@ -156,9 +171,12 @@ struct AuthenticationView: View {
 
     private func submit(_ capabilities: ServerCapabilities) async {
         if !capabilities.initialized {
-            await auth.setup(username: username, displayName: displayName, password: password, mode: mode, serverURL: catalog.serverURL)
+            await auth.setup(
+                username: username, displayName: displayName, password: password, mode: mode,
+                serverURL: catalog.serverURL)
         } else if action == .register {
-            await auth.register(username: username, displayName: displayName, password: password, serverURL: catalog.serverURL)
+            await auth.register(
+                username: username, displayName: displayName, password: password, serverURL: catalog.serverURL)
         } else {
             await auth.login(username: username, password: password, serverURL: catalog.serverURL)
         }
