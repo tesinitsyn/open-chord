@@ -5,6 +5,7 @@ struct LibraryView: View {
     private enum Section: String, CaseIterable, Identifiable {
         case albums = "Albums"
         case artists = "Artists"
+        case playlists = "Playlists"
         case downloaded = "Downloaded"
 
         var id: Self { self }
@@ -65,6 +66,7 @@ struct LibraryView: View {
                 albums: catalog.albums.filter { $0.artist.id == artist.id }
             )
         }
+        .navigationDestination(for: Playlist.self) { PlaylistView(playlist: $0) }
     }
 
     private var header: some View {
@@ -84,6 +86,8 @@ struct LibraryView: View {
 
                 if section == .artists {
                     artistList
+                } else if section == .playlists {
+                    playlistList
                 } else if visibleAlbums.isEmpty {
                     ContentUnavailableView(
                         "No Downloaded Albums",
@@ -138,13 +142,13 @@ struct LibraryView: View {
             .scrollIndicators(.hidden)
 
             HStack {
-                Text(section == .artists ? "\(artists.count) artists" : "\(visibleAlbums.count) albums")
+                Text(section == .artists ? "\(artists.count) artists" : section == .playlists ? "\(catalog.playlists.count) playlists" : "\(visibleAlbums.count) albums")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
 
                 Spacer()
 
-                if section != .artists {
+                if section != .artists && section != .playlists {
                     Menu {
                         Picker("Sort albums", selection: $sortOrder) {
                             ForEach(SortOrder.allCases) { order in
@@ -227,6 +231,28 @@ struct LibraryView: View {
 
                 Divider()
                     .padding(.leading, 78)
+            }
+        }
+    }
+
+    private var playlistList: some View {
+        LazyVStack(spacing: 0) {
+            ForEach(catalog.playlists) { playlist in
+                NavigationLink(value: playlist) {
+                    HStack(spacing: 14) {
+                        ArtworkView(style: playlist.artwork, cornerRadius: 12, showsShadow: false)
+                            .frame(width: 64, height: 64)
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(playlist.name).font(.headline).lineLimit(1)
+                            Text("\(playlist.tracks.count) tracks").font(.subheadline).foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        Image(systemName: "chevron.right").foregroundStyle(.tertiary)
+                    }
+                    .padding(.vertical, 10)
+                }
+                .buttonStyle(.plain)
+                Divider().padding(.leading, 78)
             }
         }
     }

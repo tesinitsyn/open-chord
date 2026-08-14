@@ -52,6 +52,15 @@ struct Track: Identifiable, Hashable {
     }
 }
 
+/// An ordered server playlist ready for queue playback.
+struct Playlist: Identifiable, Hashable {
+    let id: UUID
+    let name: String
+    let description: String
+    let artwork: ArtworkStyle
+    let tracks: [Track]
+}
+
 /// A media location understood by a playback engine.
 enum AudioSource: Hashable {
     case bundled(resource: String, fileExtension: String)

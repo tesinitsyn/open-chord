@@ -19,6 +19,7 @@ final class CatalogStore: ObservableObject {
     static let defaultServerAddress = "http://localhost:8080"
 
     @Published private(set) var albums: [Album] = []
+    @Published private(set) var playlists: [Playlist] = []
     @Published private(set) var isLoading = false
     @Published private(set) var errorMessage: String?
     @Published private(set) var serverURL: URL
@@ -56,6 +57,7 @@ final class CatalogStore: ObservableObject {
 
         do {
             albums = try await loader.fetchAlbums(from: serverURL)
+            playlists = try await loader.fetchPlaylists(from: serverURL)
             hasLoaded = true
             connectionState = .connected
         } catch {
@@ -77,6 +79,7 @@ final class CatalogStore: ObservableObject {
         defaults.set(url.absoluteString, forKey: Self.serverURLKey)
         hasLoaded = false
         albums = []
+        playlists = []
         await reload()
     }
 
