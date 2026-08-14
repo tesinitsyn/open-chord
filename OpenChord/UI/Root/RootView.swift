@@ -273,28 +273,10 @@ private struct MiniPlayerArtwork: View {
     let cornerRadius: CGFloat
 
     var body: some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                .fill(.quaternary)
-
-            Image(systemName: style.symbol)
-                .font(.system(size: size * 0.34, weight: .medium))
-                .foregroundStyle(.secondary)
-
-            if let remoteURL = style.remoteURL {
-                AsyncImage(url: remoteURL) { phase in
-                    if case let .success(image) = phase {
-                        image
-                            .resizable()
-                            .scaledToFill()
-                    }
-                }
-            }
-        }
-        .frame(width: size, height: size)
-        .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
-        .contentShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
-        .accessibilityHidden(true)
+        ArtworkView(style: style, cornerRadius: cornerRadius)
+            .frame(width: size, height: size)
+            .contentShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+            .accessibilityHidden(true)
     }
 }
 

@@ -34,15 +34,28 @@ struct ArtworkView: View {
         .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
         .accessibilityHidden(true)
         .task(id: style.remoteURL) {
-            remoteImage = nil
             guard
                 let remoteURL = style.remoteURL,
-                let data = await ArtworkDataCache.shared.data(for: remoteURL),
                 !Task.isCancelled
             else { return }
 
+            let cacheURL = ArtworkDataCache.cacheIdentity(for: remoteURL)
+            if let cached = DecodedArtworkCache.images.object(forKey: cacheURL as NSURL) {
+                remoteImage = cached
+                return
+            }
+
+            remoteImage = nil
+            guard
+                let data = await ArtworkDataCache.shared.data(for: remoteURL),
+                !Task.isCancelled,
+                let image = UIImage(data: data)
+            else { return }
+
+            DecodedArtworkCache.images.setObject(image, forKey: cacheURL as NSURL)
+
             withAnimation(.easeOut(duration: 0.2)) {
-                remoteImage = UIImage(data: data)
+                remoteImage = image
             }
         }
     }
@@ -77,49 +90,88 @@ struct ArtworkView: View {
 ///
 /// Artwork endpoints are not required to send HTTP cache headers, so relying on
 /// `URLCache` alone causes the same images to be fetched after every launch.
-private actor ArtworkDataCache {
+actor ArtworkDataCache {
     static let shared = ArtworkDataCache()
 
-    private var memory: [URL: Data] = [:]
+    private var memory: [String: Data] = [:]
+    private var inFlight: [String: Task<Data?, Never>] = [:]
     private let directory: URL
+    private let session: URLSession
 
-    init(fileManager: FileManager = .default) {
-        directory = fileManager.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+    init(
+        session: URLSession = .shared,
+        fileManager: FileManager = .default,
+        directory: URL? = nil
+    ) {
+        self.session = session
+        self.directory =
+            directory
+            ?? fileManager.urls(for: .cachesDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("Artwork", isDirectory: true)
         try? fileManager.createDirectory(
-            at: directory,
+            at: self.directory,
             withIntermediateDirectories: true
         )
     }
 
     func data(for url: URL) async -> Data? {
-        if let cached = memory[url] {
+        let key = cacheKey(for: url)
+        if let cached = memory[key] {
             return cached
         }
 
-        let fileURL = directory.appendingPathComponent(cacheKey(for: url))
+        let fileURL = directory.appendingPathComponent(key)
         if let cached = try? Data(contentsOf: fileURL) {
-            memory[url] = cached
+            memory[key] = cached
             return cached
         }
 
-        guard
-            let (data, response) = try? await URLSession.shared.data(from: url),
-            let response = response as? HTTPURLResponse,
-            (200..<300).contains(response.statusCode),
-            UIImage(data: data) != nil
-        else { return nil }
+        if let request = inFlight[key] {
+            return await request.value
+        }
 
-        memory[url] = data
-        try? data.write(to: fileURL, options: .atomic)
+        let request = Task<Data?, Never> { [session] in
+            guard
+                let (data, response) = try? await session.data(from: url),
+                let response = response as? HTTPURLResponse,
+                (200..<300).contains(response.statusCode),
+                UIImage(data: data) != nil
+            else { return nil }
+            return data
+        }
+        inFlight[key] = request
+        let data = await request.value
+        inFlight[key] = nil
+        guard let data else { return nil }
+
+        memory[key] = data
+        try? data.write(to: fileURL, options: Data.WritingOptions.atomic)
         return data
     }
 
     private func cacheKey(for url: URL) -> String {
-        SHA256.hash(data: Data(url.absoluteString.utf8))
+        SHA256.hash(data: Data(Self.cacheIdentity(for: url).absoluteString.utf8))
             .map { String(format: "%02x", $0) }
             .joined()
     }
+
+    nonisolated static func cacheIdentity(for url: URL) -> URL {
+        guard var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else {
+            return url
+        }
+        components.queryItems = components.queryItems?.filter { $0.name != "access_token" }
+        return components.url ?? url
+    }
+}
+
+@MainActor
+private enum DecodedArtworkCache {
+    static let images: NSCache<NSURL, UIImage> = {
+        let cache = NSCache<NSURL, UIImage>()
+        cache.countLimit = 160
+        cache.totalCostLimit = 96 * 1_024 * 1_024
+        return cache
+    }()
 }
 
 private extension ArtworkColor {

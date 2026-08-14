@@ -9,15 +9,23 @@ struct OpenChordApp: App {
     @State private var player = PlaybackController()
     @StateObject private var catalog = CatalogStore()
     @StateObject private var downloads = TrackDownloadStore()
+    @StateObject private var auth = AuthSessionStore()
     @AppStorage("prefersLightAppearance") private var prefersLightAppearance = false
 
     var body: some Scene {
         WindowGroup {
-            RootView()
-                .environment(player)
-                .environmentObject(catalog)
-                .environmentObject(downloads)
-                .preferredColorScheme(prefersLightAppearance ? .light : .dark)
+            Group {
+                if auth.isAuthenticated {
+                    RootView()
+                } else {
+                    AuthenticationView()
+                }
+            }
+            .environment(player)
+            .environmentObject(catalog)
+            .environmentObject(downloads)
+            .environmentObject(auth)
+            .preferredColorScheme(prefersLightAppearance ? .light : .dark)
         }
     }
 }
