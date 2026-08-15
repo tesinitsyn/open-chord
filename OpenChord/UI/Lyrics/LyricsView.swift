@@ -5,6 +5,8 @@ import SwiftUI
 /// Automatic scrolling occurs only when the active lyric changes, avoiding
 /// timer-driven movement that would fight manual scrolling.
 struct LyricsView: View {
+    private static let scrollLeadTime: TimeInterval = 0.75
+
     @Environment(PlaybackController.self) private var player
     @State private var followsPlayback = true
     let track: Track
@@ -40,7 +42,7 @@ struct LyricsView: View {
                         guard let activeID = activeLine?.id else { return }
                         proxy.scrollTo(activeID, anchor: .top)
                     }
-                    .onChange(of: activeLine?.id) { _, newID in
+                    .onChange(of: scrollTargetLine?.id) { _, newID in
                         guard followsPlayback, let newID else { return }
                         withAnimation(.easeInOut(duration: 0.9)) {
                             proxy.scrollTo(newID, anchor: .top)
@@ -71,6 +73,14 @@ struct LyricsView: View {
 
     private var activeLine: LyricLine? {
         track.lyrics.last(where: { $0.startTime <= player.elapsed })
+    }
+
+    /// Starts the slow scroll shortly before a lyric becomes active, while the visual
+    /// highlight itself remains locked to the exact timestamp in ``activeLine``.
+    private var scrollTargetLine: LyricLine? {
+        track.lyrics.last {
+            $0.startTime <= player.elapsed + Self.scrollLeadTime
+        }
     }
 
     private func lyricButton(_ line: LyricLine) -> some View {
