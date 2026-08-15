@@ -11,11 +11,18 @@ struct OpenChordApp: App {
     @StateObject private var downloads = TrackDownloadStore()
     @StateObject private var auth = AuthSessionStore()
     @AppStorage("prefersLightAppearance") private var prefersLightAppearance = false
+    @AppStorage(WelcomeStorage.completedKey) private var hasCompletedWelcome = false
 
     var body: some Scene {
         WindowGroup {
             Group {
-                if auth.isAuthenticated {
+                if !hasCompletedWelcome {
+                    WelcomeView {
+                        withAnimation(.smooth) {
+                            hasCompletedWelcome = true
+                        }
+                    }
+                } else if auth.isAuthenticated {
                     RootView()
                 } else {
                     AuthenticationView()

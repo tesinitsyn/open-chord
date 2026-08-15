@@ -6,17 +6,13 @@ final class OpenChordUITests: XCTestCase {
         continueAfterFailure = false
     }
 
-    func testLaunchShowsPrimaryNavigation() {
+    func testFirstLaunchShowsIntroduction() {
         let app = XCUIApplication()
+        app.launchArguments += ["-hasCompletedWelcome", "NO"]
         app.launch()
 
-        XCTAssertTrue(app.staticTexts["Home"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.tabBars.buttons["Home"].exists)
-        XCTAssertTrue(app.tabBars.buttons["Library"].exists)
-        XCTAssertTrue(app.tabBars.buttons["Settings"].exists)
-        XCTAssertTrue(app.tabBars.buttons["Search"].exists)
-
-        app.tabBars.buttons["Settings"].tap()
-        XCTAssertTrue(app.buttons["serverSettings"].waitForExistence(timeout: 2))
+        let continueButton = app.buttons["welcomeContinue"]
+        XCTAssertTrue(continueButton.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["Skip"].exists)
     }
 }

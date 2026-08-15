@@ -6,6 +6,7 @@ struct SettingsView: View {
     @EnvironmentObject private var downloads: TrackDownloadStore
     @EnvironmentObject private var auth: AuthSessionStore
     @AppStorage("prefersLightAppearance") private var prefersLightAppearance = false
+    @AppStorage(WelcomeStorage.completedKey) private var hasCompletedWelcome = false
 
     var body: some View {
         List {
@@ -72,6 +73,11 @@ struct SettingsView: View {
             }
 
             Section {
+                Button("Replay Introduction", systemImage: "sparkles.rectangle.stack") {
+                    hasCompletedWelcome = false
+                }
+                .accessibilityIdentifier("replayIntroduction")
+
                 LabeledContent("Version", value: appVersion)
             } header: {
                 Text("About")
