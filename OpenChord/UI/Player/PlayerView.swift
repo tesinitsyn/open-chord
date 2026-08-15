@@ -16,14 +16,11 @@ struct PlayerView: View {
         NavigationStack {
             VStack(spacing: 0) {
                 if let track = player.currentTrack {
-                    ZStack {
-                        nowPlaying(track)
-                            .opacity(page == .queue ? 0 : 1)
-                            .allowsHitTesting(page != .queue)
-
+                    Group {
                         if page == .queue {
                             queueView(track)
-                                .transition(.opacity)
+                        } else {
+                            nowPlaying(track)
                         }
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -254,8 +251,20 @@ struct PlayerView: View {
 
     private func setPage(_ destination: PlayerPage) {
         let resolvedPage: PlayerPage = page == destination && destination != .player ? .player : destination
-        withAnimation(.smooth(duration: 0.38)) {
-            page = resolvedPage
+
+        // Queue and Now Playing are full-screen layouts. Crossfading them renders both trees for
+        // several frames, exposing the queue through artwork and lyrics during the transition.
+        // Switch those layouts atomically; only artwork-to-lyrics changes animate in place.
+        if page == .queue || resolvedPage == .queue {
+            var transaction = Transaction()
+            transaction.disablesAnimations = true
+            withTransaction(transaction) {
+                page = resolvedPage
+            }
+        } else {
+            withAnimation(.smooth(duration: 0.38)) {
+                page = resolvedPage
+            }
         }
     }
 }
