@@ -8,6 +8,7 @@ struct LyricsView: View {
     @Environment(PlaybackController.self) private var player
     @State private var followsPlayback = true
     let track: Track
+    var verticalPadding: CGFloat = 80
 
     var body: some View {
         if track.lyrics.isEmpty {
@@ -26,7 +27,7 @@ struct LyricsView: View {
                         }
                     }
                     .padding(.horizontal, 24)
-                    .padding(.vertical, 80)
+                    .padding(.vertical, verticalPadding)
                 }
                 .simultaneousGesture(
                     DragGesture(minimumDistance: 8)

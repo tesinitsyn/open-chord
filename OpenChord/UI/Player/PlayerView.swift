@@ -19,7 +19,7 @@ struct PlayerView: View {
                     ZStack {
                         switch page {
                         case .player: nowPlaying(track)
-                        case .lyrics: LyricsView(track: track)
+                        case .lyrics: lyricsNowPlaying(track)
                         case .queue: queueView(track)
                         }
                     }
@@ -114,6 +114,82 @@ struct PlayerView: View {
             .buttonStyle(.plain)
 
             Spacer()
+        }
+    }
+
+    /// Keeps track context and playback controls visible while lyrics are expanded.
+    private func lyricsNowPlaying(_ track: Track) -> some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 14) {
+                ArtworkView(style: track.artwork, cornerRadius: 10)
+                    .frame(width: 62, height: 62)
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(track.title)
+                        .font(.headline)
+                        .lineLimit(1)
+                    Text(track.artistName)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+
+                Spacer()
+            }
+            .padding(.horizontal, 24)
+            .padding(.top, 14)
+            .padding(.bottom, 4)
+
+            LyricsView(track: track, verticalPadding: 28)
+
+            VStack(spacing: 14) {
+                Slider(
+                    value: Binding(
+                        get: { player.elapsed },
+                        set: { player.seek(to: $0) }
+                    ),
+                    in: 0...max(1, track.duration)
+                )
+                .tint(Color.primary)
+
+                HStack {
+                    Text(player.elapsed.playbackTime)
+                    Spacer()
+                    Text("-" + max(0, track.duration - player.elapsed).playbackTime)
+                }
+                .font(.caption.monospacedDigit())
+                .foregroundStyle(.secondary)
+
+                HStack(spacing: 54) {
+                    Button {
+                        player.playPrevious()
+                    } label: {
+                        Image(systemName: "backward.fill")
+                            .font(.title2)
+                            .frame(width: 44, height: 44)
+                    }
+
+                    Button {
+                        player.togglePlayback()
+                    } label: {
+                        Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
+                            .font(.system(size: 34, weight: .semibold))
+                            .frame(width: 58, height: 52)
+                    }
+
+                    Button {
+                        player.playNext()
+                    } label: {
+                        Image(systemName: "forward.fill")
+                            .font(.title2)
+                            .frame(width: 44, height: 44)
+                    }
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(.horizontal, 24)
+            .padding(.top, 8)
+            .padding(.bottom, 6)
         }
     }
 
