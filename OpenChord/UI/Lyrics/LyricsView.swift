@@ -40,12 +40,12 @@ struct LyricsView: View {
                     .task(id: track.id) {
                         await Task.yield()
                         guard let activeID = activeLine?.id else { return }
-                        proxy.scrollTo(activeID, anchor: .top)
+                        proxy.scrollTo(activeID, anchor: scrollAnchor(for: activeID))
                     }
                     .onChange(of: scrollTargetLine?.id) { _, newID in
                         guard followsPlayback, let newID else { return }
                         withAnimation(.easeInOut(duration: 0.9)) {
-                            proxy.scrollTo(newID, anchor: .top)
+                            proxy.scrollTo(newID, anchor: scrollAnchor(for: newID))
                         }
                     }
                     .overlay(alignment: .bottomTrailing) {
@@ -54,7 +54,7 @@ struct LyricsView: View {
                                 followsPlayback = true
                                 guard let activeID = activeLine?.id else { return }
                                 withAnimation(.easeInOut(duration: 0.9)) {
-                                    proxy.scrollTo(activeID, anchor: .top)
+                                    proxy.scrollTo(activeID, anchor: scrollAnchor(for: activeID))
                                 }
                             }
                             .font(.subheadline.weight(.semibold))
@@ -81,6 +81,13 @@ struct LyricsView: View {
         track.lyrics.last {
             $0.startTime <= player.elapsed + Self.scrollLeadTime
         }
+    }
+
+    private func scrollAnchor(for lineID: UUID) -> UnitPoint {
+        guard let index = track.lyrics.firstIndex(where: { $0.id == lineID }), index >= 3 else {
+            return .top
+        }
+        return UnitPoint(x: 0.5, y: 0.32)
     }
 
     private func lyricButton(_ line: LyricLine) -> some View {
