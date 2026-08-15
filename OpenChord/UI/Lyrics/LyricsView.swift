@@ -18,50 +18,53 @@ struct LyricsView: View {
                 description: Text("This track has not been synchronized.")
             )
         } else {
-            ScrollViewReader { proxy in
-                ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 22) {
-                        ForEach(track.lyrics) { line in
-                            lyricButton(line)
-                                .id(line.id)
-                        }
-                    }
-                    .padding(.horizontal, 24)
-                    .padding(.vertical, verticalPadding)
-                }
-                .simultaneousGesture(
-                    DragGesture(minimumDistance: 8)
-                        .onChanged { _ in followsPlayback = false }
-                )
-                .task(id: track.id) {
-                    await Task.yield()
-                    guard let activeID = activeLine?.id else { return }
-                    proxy.scrollTo(activeID, anchor: .center)
-                }
-                .onChange(of: activeLine?.id) { _, newID in
-                    guard followsPlayback, let newID else { return }
-                    withAnimation(.smooth(duration: 0.48)) {
-                        proxy.scrollTo(newID, anchor: .center)
-                    }
-                }
-                .overlay(alignment: .bottomTrailing) {
-                    if !followsPlayback {
-                        Button("Follow Lyrics", systemImage: "quote.bubble.fill") {
-                            followsPlayback = true
-                            guard let activeID = activeLine?.id else { return }
-                            withAnimation(.smooth) {
-                                proxy.scrollTo(activeID, anchor: .center)
+            GeometryReader { geometry in
+                ScrollViewReader { proxy in
+                    ScrollView {
+                        LazyVStack(alignment: .leading, spacing: 22) {
+                            ForEach(track.lyrics) { line in
+                                lyricButton(line)
+                                    .id(line.id)
                             }
                         }
-                        .font(.subheadline.weight(.semibold))
-                        .padding(.horizontal, 14)
-                        .frame(minHeight: 44)
-                        .background(.regularMaterial, in: Capsule())
-                        .padding(20)
-                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                        .padding(.horizontal, 24)
+                        .padding(.top, verticalPadding)
+                        .padding(.bottom, max(verticalPadding, geometry.size.height - 72))
                     }
+                    .simultaneousGesture(
+                        DragGesture(minimumDistance: 8)
+                            .onChanged { _ in followsPlayback = false }
+                    )
+                    .task(id: track.id) {
+                        await Task.yield()
+                        guard let activeID = activeLine?.id else { return }
+                        proxy.scrollTo(activeID, anchor: .top)
+                    }
+                    .onChange(of: activeLine?.id) { _, newID in
+                        guard followsPlayback, let newID else { return }
+                        withAnimation(.easeInOut(duration: 0.9)) {
+                            proxy.scrollTo(newID, anchor: .top)
+                        }
+                    }
+                    .overlay(alignment: .bottomTrailing) {
+                        if !followsPlayback {
+                            Button("Follow Lyrics", systemImage: "quote.bubble.fill") {
+                                followsPlayback = true
+                                guard let activeID = activeLine?.id else { return }
+                                withAnimation(.easeInOut(duration: 0.9)) {
+                                    proxy.scrollTo(activeID, anchor: .top)
+                                }
+                            }
+                            .font(.subheadline.weight(.semibold))
+                            .padding(.horizontal, 14)
+                            .frame(minHeight: 44)
+                            .background(.regularMaterial, in: Capsule())
+                            .padding(20)
+                            .transition(.move(edge: .bottom).combined(with: .opacity))
+                        }
+                    }
+                    .animation(.smooth, value: followsPlayback)
                 }
-                .animation(.smooth, value: followsPlayback)
             }
         }
     }
@@ -86,7 +89,7 @@ struct LyricsView: View {
                 .contentShape(Rectangle())
                 .opacity(isActive ? 1 : 0.62)
                 .scaleEffect(isActive ? 1 : 0.97, anchor: .leading)
-                .animation(.easeOut(duration: 0.12), value: isActive)
+                .animation(.easeInOut(duration: 0.35), value: isActive)
         }
         .buttonStyle(.plain)
         .accessibilityLabel("\(line.text), \(line.startTime.playbackTime)")
