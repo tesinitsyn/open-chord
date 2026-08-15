@@ -19,11 +19,13 @@ struct PlayerView: View {
         NavigationStack {
             VStack(spacing: 0) {
                 if let track = player.currentTrack {
-                    Group {
+                    ZStack {
+                        nowPlaying(track)
+                            .opacity(page == .queue ? 0 : 1)
+                            .allowsHitTesting(page != .queue)
+
                         if page == .queue {
                             queueView(track)
-                        } else {
-                            nowPlaying(track)
                         }
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -49,13 +51,15 @@ struct PlayerView: View {
                 Spacer(minLength: 8)
 
                 ZStack {
-                    if page == .lyrics {
-                        LyricsView(track: track, verticalPadding: 24)
-                    } else {
-                        ArtworkView(style: track.artwork)
-                            .frame(maxWidth: 340)
-                            .padding(.horizontal, 24)
-                    }
+                    ArtworkView(style: track.artwork)
+                        .frame(maxWidth: 340)
+                        .padding(.horizontal, 24)
+                        .opacity(page == .lyrics ? 0 : 1)
+                        .allowsHitTesting(page != .lyrics)
+
+                    LyricsView(track: track, verticalPadding: 24)
+                        .opacity(page == .lyrics ? 1 : 0)
+                        .allowsHitTesting(page == .lyrics)
                 }
                 .opacity(artworkReveal)
                 .scaleEffect(0.97 + artworkReveal * 0.03)
@@ -281,7 +285,7 @@ struct PlayerView: View {
         pageTransitionTask = Task { @MainActor in
             await Task.yield()
             guard !Task.isCancelled else { return }
-            withAnimation(.smooth(duration: 0.32)) {
+            withAnimation(.smooth(duration: 0.58)) {
                 reveal.wrappedValue = 1
             }
         }
