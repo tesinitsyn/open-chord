@@ -5,8 +5,12 @@ import SwiftUI
 /// Automatic scrolling occurs only when the active lyric changes, avoiding
 /// timer-driven movement that would fight manual scrolling.
 struct LyricsView: View {
+    private static let scrollLeadTime: TimeInterval = 0.75
+
     @Environment(PlaybackController.self) private var player
+    @State private var followsPlayback = true
     let track: Track
+    var verticalPadding: CGFloat = 80
 
     var body: some View {
         if track.lyrics.isEmpty {
@@ -16,22 +20,52 @@ struct LyricsView: View {
                 description: Text("This track has not been synchronized.")
             )
         } else {
-            ScrollViewReader { proxy in
-                ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 22) {
-                        ForEach(track.lyrics) { line in
-                            lyricButton(line)
-                                .id(line.id)
+            GeometryReader { geometry in
+                ScrollViewReader { proxy in
+                    ScrollView {
+                        LazyVStack(alignment: .leading, spacing: 22) {
+                            ForEach(track.lyrics) { line in
+                                lyricButton(line)
+                                    .id(line.id)
+                            }
+                        }
+                        .padding(.horizontal, 24)
+                        .padding(.top, verticalPadding)
+                        .padding(.bottom, max(verticalPadding, geometry.size.height - 72))
+                    }
+                    .simultaneousGesture(
+                        DragGesture(minimumDistance: 8)
+                            .onChanged { _ in followsPlayback = false }
+                    )
+                    .task(id: track.id) {
+                        await Task.yield()
+                        guard let activeID = activeLine?.id else { return }
+                        proxy.scrollTo(activeID, anchor: scrollAnchor(for: activeID))
+                    }
+                    .onChange(of: scrollTargetLine?.id) { _, newID in
+                        guard followsPlayback, let newID else { return }
+                        withAnimation(.easeInOut(duration: 0.9)) {
+                            proxy.scrollTo(newID, anchor: scrollAnchor(for: newID))
                         }
                     }
-                    .padding(.horizontal, 24)
-                    .padding(.vertical, 80)
-                }
-                .onChange(of: activeLine?.id) { _, newID in
-                    guard let newID else { return }
-                    withAnimation(.easeInOut(duration: 0.55)) {
-                        proxy.scrollTo(newID, anchor: .center)
+                    .overlay(alignment: .bottomTrailing) {
+                        if !followsPlayback {
+                            Button("Follow Lyrics", systemImage: "quote.bubble.fill") {
+                                followsPlayback = true
+                                guard let activeID = activeLine?.id else { return }
+                                withAnimation(.easeInOut(duration: 0.9)) {
+                                    proxy.scrollTo(activeID, anchor: scrollAnchor(for: activeID))
+                                }
+                            }
+                            .font(.subheadline.weight(.semibold))
+                            .padding(.horizontal, 14)
+                            .frame(minHeight: 44)
+                            .background(.regularMaterial, in: Capsule())
+                            .padding(20)
+                            .transition(.move(edge: .bottom).combined(with: .opacity))
+                        }
                     }
+                    .animation(.smooth, value: followsPlayback)
                 }
             }
         }
@@ -41,18 +75,38 @@ struct LyricsView: View {
         track.lyrics.last(where: { $0.startTime <= player.elapsed })
     }
 
+    /// Starts the slow scroll shortly before a lyric becomes active, while the visual
+    /// highlight itself remains locked to the exact timestamp in ``activeLine``.
+    private var scrollTargetLine: LyricLine? {
+        track.lyrics.last {
+            $0.startTime <= player.elapsed + Self.scrollLeadTime
+        }
+    }
+
+    private func scrollAnchor(for lineID: UUID) -> UnitPoint {
+        guard let index = track.lyrics.firstIndex(where: { $0.id == lineID }), index >= 3 else {
+            return .top
+        }
+        return UnitPoint(x: 0.5, y: 0.32)
+    }
+
     private func lyricButton(_ line: LyricLine) -> some View {
         let isActive = activeLine?.id == line.id
 
         return Button {
+            followsPlayback = true
             player.seek(to: line.startTime)
         } label: {
             Text(line.text)
-                .font(.system(size: isActive ? 30 : 25, weight: .bold, design: .rounded))
-                .foregroundStyle(isActive ? .white : .white.opacity(0.32))
+                .font(isActive ? .title.bold() : .title2.bold())
+                .fontDesign(.rounded)
+                .foregroundStyle(isActive ? Color.primary : Color.secondary)
                 .multilineTextAlignment(.leading)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .animation(.easeOut(duration: 0.25), value: isActive)
+                .contentShape(Rectangle())
+                .opacity(isActive ? 1 : 0.62)
+                .scaleEffect(isActive ? 1 : 0.97, anchor: .leading)
+                .animation(.easeInOut(duration: 0.35), value: isActive)
         }
         .buttonStyle(.plain)
         .accessibilityLabel("\(line.text), \(line.startTime.playbackTime)")

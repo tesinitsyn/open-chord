@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Full-screen player presentation with now-playing and synchronized-lyrics pages.
+/// Full-screen player whose artwork region can reveal synchronized lyrics.
 struct PlayerView: View {
     @Environment(PlaybackController.self) private var player
     @State private var page = PlayerPage.player
@@ -17,14 +17,15 @@ struct PlayerView: View {
             VStack(spacing: 0) {
                 if let track = player.currentTrack {
                     ZStack {
-                        switch page {
-                        case .player: nowPlaying(track)
-                        case .lyrics: LyricsView(track: track)
-                        case .queue: queueView(track)
+                        nowPlaying(track)
+                            .opacity(page == .queue ? 0 : 1)
+                            .allowsHitTesting(page != .queue)
+
+                        if page == .queue {
+                            queueView(track)
+                                .transition(.opacity)
                         }
                     }
-                    .id(page)
-                    .transition(.opacity.combined(with: .scale(scale: 0.985)))
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
 
                     playerNavigation
@@ -38,82 +39,83 @@ struct PlayerView: View {
     }
 
     private func nowPlaying(_ track: Track) -> some View {
-        VStack(spacing: 24) {
-            Spacer()
+        GeometryReader { proxy in
+            let contentHeight = max(230, min(390, proxy.size.height * 0.52))
 
-            ArtworkView(style: track.artwork)
-                .frame(maxWidth: 340)
+            VStack(spacing: 18) {
+                Spacer(minLength: 8)
+
+                ZStack {
+                    ArtworkView(style: track.artwork)
+                        .frame(maxWidth: 340)
+                        .padding(.horizontal, 24)
+                        .opacity(page == .lyrics ? 0 : 1)
+                        .scaleEffect(page == .lyrics ? 0.96 : 1)
+
+                    LyricsView(track: track, verticalPadding: 24)
+                        .opacity(page == .lyrics ? 1 : 0)
+                        .allowsHitTesting(page == .lyrics)
+                }
+                .frame(height: contentHeight)
+                .clipped()
+
+                VStack(spacing: 5) {
+                    Text(track.title).font(.title2.bold())
+                    Text(track.artistName).foregroundStyle(.secondary)
+                }
+
+                VStack(spacing: 8) {
+                    Slider(
+                        value: Binding(
+                            get: { player.elapsed },
+                            set: { newValue in player.seek(to: newValue) }
+                        ),
+                        in: 0...max(1, track.duration)
+                    )
+                    .tint(Color.primary)
+
+                    HStack {
+                        Text(player.elapsed.playbackTime)
+                        Spacer()
+                        Text("-" + max(0, track.duration - player.elapsed).playbackTime)
+                    }
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(.secondary)
+                }
                 .padding(.horizontal, 24)
 
-            VStack(spacing: 5) {
-                Text(track.title).font(.title2.bold())
-                Text(track.artistName).foregroundStyle(.secondary)
+                HStack(spacing: 25) {
+                    Button {
+                        player.toggleShuffle()
+                    } label: {
+                        Image(systemName: "shuffle")
+                            .foregroundStyle(player.isShuffleEnabled ? Color.primary : .secondary)
+                            .frame(width: 40, height: 44)
+                    }
+                    .accessibilityLabel(player.isShuffleEnabled ? "Turn Shuffle Off" : "Turn Shuffle On")
+                    .accessibilityValue(player.isShuffleEnabled ? "On" : "Off")
+
+                    Button { player.playPrevious() } label: {
+                        Image(systemName: "backward.fill").font(.title2).frame(width: 40, height: 44)
+                    }
+                    Button { player.togglePlayback() } label: {
+                        Image(systemName: player.isPlaying ? "pause.circle.fill" : "play.circle.fill")
+                            .font(.system(size: 70))
+                    }
+                    Button { player.playNext() } label: {
+                        Image(systemName: "forward.fill").font(.title2).frame(width: 40, height: 44)
+                    }
+                    Button { player.cycleRepeatMode() } label: {
+                        Image(systemName: player.repeatMode.symbol)
+                            .foregroundStyle(player.repeatMode == .off ? .secondary : Color.primary)
+                            .frame(width: 40, height: 44)
+                    }
+                    .accessibilityLabel(repeatTitle)
+                    .accessibilityValue(player.repeatMode == .off ? "Off" : "On")
+                }
+                .buttonStyle(.plain)
+                Spacer(minLength: 4)
             }
-
-            VStack(spacing: 8) {
-                Slider(
-                    value: Binding(
-                        get: { player.elapsed },
-                        set: { newValue in player.seek(to: newValue) }
-                    ),
-                    in: 0...max(1, track.duration)
-                )
-                .tint(Color.primary)
-
-                HStack {
-                    Text(player.elapsed.playbackTime)
-                    Spacer()
-                    Text("-" + max(0, track.duration - player.elapsed).playbackTime)
-                }
-                .font(.caption.monospacedDigit())
-                .foregroundStyle(.secondary)
-            }
-            .padding(.horizontal, 24)
-
-            HStack(spacing: 25) {
-                Button {
-                    player.toggleShuffle()
-                } label: {
-                    Image(systemName: "shuffle")
-                        .foregroundStyle(player.isShuffleEnabled ? Color.primary : .secondary)
-                        .frame(width: 40, height: 44)
-                }
-                .accessibilityLabel(player.isShuffleEnabled ? "Turn Shuffle Off" : "Turn Shuffle On")
-                .accessibilityValue(player.isShuffleEnabled ? "On" : "Off")
-
-                Button {
-                    player.playPrevious()
-                } label: {
-                    Image(systemName: "backward.fill")
-                        .font(.title2)
-                        .frame(width: 40, height: 44)
-                }
-                Button {
-                    player.togglePlayback()
-                } label: {
-                    Image(systemName: player.isPlaying ? "pause.circle.fill" : "play.circle.fill")
-                        .font(.system(size: 70))
-                }
-                Button {
-                    player.playNext()
-                } label: {
-                    Image(systemName: "forward.fill")
-                        .font(.title2)
-                        .frame(width: 40, height: 44)
-                }
-                Button {
-                    player.cycleRepeatMode()
-                } label: {
-                    Image(systemName: player.repeatMode.symbol)
-                        .foregroundStyle(player.repeatMode == .off ? .secondary : Color.primary)
-                        .frame(width: 40, height: 44)
-                }
-                .accessibilityLabel(repeatTitle)
-                .accessibilityValue(player.repeatMode == .off ? "Off" : "On")
-            }
-            .buttonStyle(.plain)
-
-            Spacer()
         }
     }
 

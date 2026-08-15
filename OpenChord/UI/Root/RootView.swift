@@ -10,6 +10,7 @@ struct RootView: View {
     }
 
     @Environment(PlaybackController.self) private var player
+    @Environment(\.scenePhase) private var scenePhase
     @EnvironmentObject private var catalog: CatalogStore
     @State private var selectedTab: AppTab = .home
 
@@ -17,8 +18,9 @@ struct RootView: View {
     var body: some View {
         @Bindable var player = player
 
-        if #available(iOS 26.0, *) {
-            modernTabShell
+        Group {
+            if #available(iOS 26.0, *) {
+                modernTabShell
                 .tabBarMinimizeBehavior(.onScrollDown)
                 .tabViewBottomAccessory {
                     if let track = player.currentTrack {
@@ -27,8 +29,8 @@ struct RootView: View {
                         AdaptiveEmptyPlaybackAccessory()
                     }
                 }
-        } else if #available(iOS 18.0, *) {
-            modernTabShell
+            } else if #available(iOS 18.0, *) {
+                modernTabShell
                 .safeAreaInset(edge: .bottom, spacing: 8) {
                     if let track = player.currentTrack {
                         LegacyMiniPlayer(track: track)
@@ -38,8 +40,8 @@ struct RootView: View {
                             .padding(.horizontal, 10)
                     }
                 }
-        } else {
-            legacyTabShell
+            } else {
+                legacyTabShell
                 .safeAreaInset(edge: .bottom, spacing: 8) {
                     if let track = player.currentTrack {
                         LegacyMiniPlayer(track: track)
@@ -49,6 +51,14 @@ struct RootView: View {
                             .padding(.horizontal, 10)
                     }
                 }
+            }
+        }
+        .onReceive(catalog.$albums) { albums in
+            player.refreshTracks(from: albums.flatMap(\.tracks))
+        }
+        .onChange(of: scenePhase) { _, phase in
+            guard phase == .active else { return }
+            Task { await catalog.reload() }
         }
     }
 

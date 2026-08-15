@@ -136,7 +136,10 @@ final class AVPlayerPlaybackEngine: PlaybackEngine {
 
     private func installTimeObserver() {
         timeObserver = player.addPeriodicTimeObserver(
-            forInterval: CMTime(seconds: 0.25, preferredTimescale: 600),
+            // Lyrics need tighter timing than the progress slider. At 250 ms a correctly
+            // timestamped line can still feel visibly late; 100 ms stays inexpensive while
+            // keeping the highlight close to the audio boundary.
+            forInterval: CMTime(seconds: 0.1, preferredTimescale: 600),
             queue: .main
         ) { [weak self] time in
             Task { @MainActor [weak self] in

@@ -275,6 +275,17 @@ final class PlaybackController {
         prepareUpcomingTrack()
     }
 
+    /// Replaces cached queue metadata after a catalog refresh without restarting playback.
+    func refreshTracks(from catalogTracks: [Track]) {
+        let refreshed = Dictionary(uniqueKeysWithValues: catalogTracks.map { ($0.id, $0) })
+        queue = queue.map { refreshed[$0.id] ?? $0 }
+        originalQueue = originalQueue.map { refreshed[$0.id] ?? $0 }
+        if let currentTrack, let updated = refreshed[currentTrack.id] {
+            self.currentTrack = updated
+            publishNowPlaying()
+        }
+    }
+
     func togglePlayback() {
         guard currentTrack != nil else { return }
         if isPlaying {
