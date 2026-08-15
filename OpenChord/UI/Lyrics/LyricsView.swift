@@ -39,13 +39,13 @@ struct LyricsView: View {
                 }
                 .onChange(of: activeLine?.id) { _, newID in
                     guard followsPlayback, let newID else { return }
-                    withAnimation(.easeInOut(duration: 0.55)) {
+                    withAnimation(.smooth(duration: 0.28)) {
                         proxy.scrollTo(newID, anchor: .center)
                     }
                 }
                 .overlay(alignment: .bottomTrailing) {
                     if !followsPlayback {
-                        Button("Follow", systemImage: "location.fill") {
+                        Button("Follow Lyrics", systemImage: "quote.bubble.fill") {
                             followsPlayback = true
                             guard let activeID = activeLine?.id else { return }
                             withAnimation(.smooth) {
@@ -85,7 +85,7 @@ struct LyricsView: View {
                 .contentShape(Rectangle())
                 .opacity(isActive ? 1 : 0.62)
                 .scaleEffect(isActive ? 1 : 0.97, anchor: .leading)
-                .animation(.easeOut(duration: 0.25), value: isActive)
+                .animation(.easeOut(duration: 0.12), value: isActive)
         }
         .buttonStyle(.plain)
         .accessibilityLabel("\(line.text), \(line.startTime.playbackTime)")
