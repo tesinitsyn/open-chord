@@ -6,6 +6,7 @@ import SwiftUI
 /// timer-driven movement that would fight manual scrolling.
 struct LyricsView: View {
     @Environment(PlaybackController.self) private var player
+    @State private var followsPlayback = true
     let track: Track
 
     var body: some View {
@@ -27,12 +28,39 @@ struct LyricsView: View {
                     .padding(.horizontal, 24)
                     .padding(.vertical, 80)
                 }
+                .simultaneousGesture(
+                    DragGesture(minimumDistance: 8)
+                        .onChanged { _ in followsPlayback = false }
+                )
+                .task(id: track.id) {
+                    await Task.yield()
+                    guard let activeID = activeLine?.id else { return }
+                    proxy.scrollTo(activeID, anchor: .center)
+                }
                 .onChange(of: activeLine?.id) { _, newID in
-                    guard let newID else { return }
+                    guard followsPlayback, let newID else { return }
                     withAnimation(.easeInOut(duration: 0.55)) {
                         proxy.scrollTo(newID, anchor: .center)
                     }
                 }
+                .overlay(alignment: .bottomTrailing) {
+                    if !followsPlayback {
+                        Button("Follow", systemImage: "location.fill") {
+                            followsPlayback = true
+                            guard let activeID = activeLine?.id else { return }
+                            withAnimation(.smooth) {
+                                proxy.scrollTo(activeID, anchor: .center)
+                            }
+                        }
+                        .font(.subheadline.weight(.semibold))
+                        .padding(.horizontal, 14)
+                        .frame(minHeight: 44)
+                        .background(.regularMaterial, in: Capsule())
+                        .padding(20)
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                    }
+                }
+                .animation(.smooth, value: followsPlayback)
             }
         }
     }
@@ -45,13 +73,18 @@ struct LyricsView: View {
         let isActive = activeLine?.id == line.id
 
         return Button {
+            followsPlayback = true
             player.seek(to: line.startTime)
         } label: {
             Text(line.text)
-                .font(.system(size: isActive ? 30 : 25, weight: .bold, design: .rounded))
-                .foregroundStyle(isActive ? .white : .white.opacity(0.32))
+                .font(isActive ? .title.bold() : .title2.bold())
+                .fontDesign(.rounded)
+                .foregroundStyle(isActive ? Color.primary : Color.secondary)
                 .multilineTextAlignment(.leading)
                 .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
+                .opacity(isActive ? 1 : 0.62)
+                .scaleEffect(isActive ? 1 : 0.97, anchor: .leading)
                 .animation(.easeOut(duration: 0.25), value: isActive)
         }
         .buttonStyle(.plain)
