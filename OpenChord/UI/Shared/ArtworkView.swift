@@ -17,16 +17,17 @@ struct ArtworkView: View {
             let side = min(proxy.size.width, proxy.size.height)
 
             ZStack {
-                fallback(side: side)
-
                 if let remoteImage {
                     Image(uiImage: remoteImage)
                         .resizable()
                         .scaledToFill()
-                        .transition(.opacity)
-                } else if style.remoteURL != nil {
-                    ProgressView()
-                        .tint(.white.opacity(0.8))
+                } else {
+                    fallback(side: side)
+
+                    if style.remoteURL != nil {
+                        ProgressView()
+                            .tint(.white.opacity(0.8))
+                    }
                 }
             }
             .frame(width: proxy.size.width, height: proxy.size.height)
