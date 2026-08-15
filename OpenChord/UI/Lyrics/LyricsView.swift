@@ -40,7 +40,7 @@ struct LyricsView: View {
                 }
                 .onChange(of: activeLine?.id) { _, newID in
                     guard followsPlayback, let newID else { return }
-                    withAnimation(.smooth(duration: 0.28)) {
+                    withAnimation(.smooth(duration: 0.48)) {
                         proxy.scrollTo(newID, anchor: .center)
                     }
                 }
