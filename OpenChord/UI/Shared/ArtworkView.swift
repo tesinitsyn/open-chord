@@ -9,6 +9,7 @@ import UIKit
 struct ArtworkView: View {
     let style: ArtworkStyle
     var cornerRadius: CGFloat = 24
+    var showsFallbackSymbol = true
     @State private var remoteImage: UIImage?
 
     var body: some View {
@@ -16,16 +17,17 @@ struct ArtworkView: View {
             let side = min(proxy.size.width, proxy.size.height)
 
             ZStack {
-                fallback(side: side)
-
                 if let remoteImage {
                     Image(uiImage: remoteImage)
                         .resizable()
                         .scaledToFill()
-                        .transition(.opacity)
-                } else if style.remoteURL != nil {
-                    ProgressView()
-                        .tint(.white.opacity(0.8))
+                } else {
+                    fallback(side: side)
+
+                    if style.remoteURL != nil {
+                        ProgressView()
+                            .tint(.white.opacity(0.8))
+                    }
                 }
             }
             .frame(width: proxy.size.width, height: proxy.size.height)
@@ -77,7 +79,7 @@ struct ArtworkView: View {
             // Lazy containers briefly measure off-screen cells at zero. Avoid
             // asking SF Symbols for a zero-point glyph, which emits CoreUI
             // diagnostics on iOS 26.
-            if side >= 1 {
+            if showsFallbackSymbol, side >= 1 {
                 Image(systemName: style.symbol)
                     .font(.system(size: side * 0.23, weight: .medium))
                     .foregroundStyle(.white.opacity(0.9))
