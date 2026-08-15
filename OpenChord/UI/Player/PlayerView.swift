@@ -51,7 +51,7 @@ struct PlayerView: View {
                 Spacer(minLength: 8)
 
                 ZStack {
-                    ArtworkView(style: track.artwork)
+                    ArtworkView(style: track.artwork, showsFallbackSymbol: false)
                         .frame(maxWidth: 340)
                         .padding(.horizontal, 24)
                         .opacity(page == .lyrics ? 0 : 1)
