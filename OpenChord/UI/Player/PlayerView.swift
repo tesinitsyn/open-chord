@@ -4,6 +4,9 @@ import SwiftUI
 struct PlayerView: View {
     @Environment(PlaybackController.self) private var player
     @State private var page = PlayerPage.player
+    @State private var screenReveal = 1.0
+    @State private var artworkReveal = 1.0
+    @State private var pageTransitionTask: Task<Void, Never>?
 
     /// Sections available within the full player presentation.
     private enum PlayerPage: Hashable {
@@ -24,6 +27,9 @@ struct PlayerView: View {
                         }
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .opacity(screenReveal)
+                    .scaleEffect(0.985 + screenReveal * 0.015)
+                    .blur(radius: (1 - screenReveal) * 5)
 
                     playerNavigation
                 } else {
@@ -43,16 +49,17 @@ struct PlayerView: View {
                 Spacer(minLength: 8)
 
                 ZStack {
-                    ArtworkView(style: track.artwork)
-                        .frame(maxWidth: 340)
-                        .padding(.horizontal, 24)
-                        .opacity(page == .lyrics ? 0 : 1)
-                        .scaleEffect(page == .lyrics ? 0.96 : 1)
-
-                    LyricsView(track: track, verticalPadding: 24)
-                        .opacity(page == .lyrics ? 1 : 0)
-                        .allowsHitTesting(page == .lyrics)
+                    if page == .lyrics {
+                        LyricsView(track: track, verticalPadding: 24)
+                    } else {
+                        ArtworkView(style: track.artwork)
+                            .frame(maxWidth: 340)
+                            .padding(.horizontal, 24)
+                    }
                 }
+                .opacity(artworkReveal)
+                .scaleEffect(0.97 + artworkReveal * 0.03)
+                .blur(radius: (1 - artworkReveal) * 5)
                 .frame(height: contentHeight)
                 .clipped()
 
@@ -252,18 +259,30 @@ struct PlayerView: View {
     private func setPage(_ destination: PlayerPage) {
         let resolvedPage: PlayerPage = page == destination && destination != .player ? .player : destination
 
-        // Queue and Now Playing are full-screen layouts. Crossfading them renders both trees for
-        // several frames, exposing the queue through artwork and lyrics during the transition.
-        // Switch those layouts atomically; only artwork-to-lyrics changes animate in place.
         if page == .queue || resolvedPage == .queue {
-            var transaction = Transaction()
-            transaction.disablesAnimations = true
-            withTransaction(transaction) {
-                page = resolvedPage
-            }
+            replacePage(with: resolvedPage, reveal: $screenReveal)
         } else {
-            withAnimation(.smooth(duration: 0.38)) {
-                page = resolvedPage
+            replacePage(with: resolvedPage, reveal: $artworkReveal)
+        }
+    }
+
+    /// Replaces a layout before animating the new tree in, so two full views never overlap.
+    private func replacePage(with destination: PlayerPage, reveal: Binding<Double>) {
+        pageTransitionTask?.cancel()
+        var transaction = Transaction()
+        transaction.disablesAnimations = true
+        withTransaction(transaction) {
+            screenReveal = 1
+            artworkReveal = 1
+            reveal.wrappedValue = 0
+            page = destination
+        }
+
+        pageTransitionTask = Task { @MainActor in
+            await Task.yield()
+            guard !Task.isCancelled else { return }
+            withAnimation(.smooth(duration: 0.32)) {
+                reveal.wrappedValue = 1
             }
         }
     }
